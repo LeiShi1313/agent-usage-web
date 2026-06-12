@@ -9,6 +9,7 @@ The Docker image is published at:
 
 ```text
 leishi1313/agent-usage-web:latest
+leishi1313/agent-usage-web:0.1.2
 leishi1313/agent-usage-web:0.1.1
 leishi1313/agent-usage-web:0.1.0
 ```
@@ -71,9 +72,12 @@ AGENT_USAGE_WEB_PORT=39173
 AGENT_USAGE_EXPORTER_PORT=39174
 EXPORTER_TOKEN=replace-me
 WEB_ACCOUNT_DISPLAY=hidden
+WEB_PROVIDER_ORDER=codex,antigravity
 WEB_EXPORTER_POLL_SECONDS=60
 EXPORTER_REFRESH_SECONDS=300
 ```
+
+`WEB_PROVIDER_ORDER` controls the physical display order of provider rows/tabs in the web UI. Providers listed first appear first; unlisted providers fall back to alphabetical order after the listed providers.
 
 To aggregate multiple exporters, set `WEB_EXPORTERS_JSON` in `.env`:
 

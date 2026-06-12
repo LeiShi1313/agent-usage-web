@@ -38,6 +38,7 @@ const WEB_EXPIRED_AFTER_SECONDS = numberEnv(process.env.WEB_EXPIRED_AFTER_SECOND
 const WEB_POLL_TIMEOUT_MS = numberEnv(process.env.WEB_POLL_TIMEOUT_MS, 75_000);
 const WEB_SQLITE_PATH = process.env.WEB_SQLITE_PATH ??
   path.join(XDG_DATA_HOME, 'agent-usage-web', 'polls.sqlite');
+const WEB_PROVIDER_ORDER = parseProviderOrder(process.env.WEB_PROVIDER_ORDER ?? 'codex,antigravity');
 
 let claudeRefreshPromise = null;
 
@@ -82,6 +83,13 @@ function normalizeAccountDisplay(value) {
   const normalized = String(value ?? '').trim().toLowerCase();
   if (['label', 'full'].includes(normalized)) return normalized;
   return 'hidden';
+}
+
+function parseProviderOrder(value) {
+  return String(value ?? '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 function isSensitivePath(request) {
@@ -975,6 +983,19 @@ function recordSortValue(record, targetState) {
   return new Date(record.data?.updatedAt ?? record.data?.usage?.updatedAt ?? record.collectedAt ?? targetState.lastSuccessAt ?? 0).getTime();
 }
 
+function providerDisplayRank(provider) {
+  const index = WEB_PROVIDER_ORDER.indexOf(String(provider ?? '').toLowerCase());
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+}
+
+function compareProviderDisplayOrder(a, b) {
+  const rankDelta = providerDisplayRank(a.provider) - providerDisplayRank(b.provider);
+  if (rankDelta) return rankDelta;
+  const providerDelta = String(a.provider ?? '').localeCompare(String(b.provider ?? ''));
+  if (providerDelta) return providerDelta;
+  return String(a.accountKey ?? a.account ?? '').localeCompare(String(b.accountKey ?? b.account ?? ''));
+}
+
 function buildDashboard(targets, cache) {
   const usageByAccount = new Map();
   const costByAccount = new Map();
@@ -1047,8 +1068,8 @@ function buildDashboard(targets, cache) {
     },
     usage: [...usageByAccount.values()]
       .map(({ record, targetState }) => publicUsage(record, targetState))
-      .sort((a, b) => a.provider.localeCompare(b.provider)),
-    cost: [...costByAccount.values()].sort((a, b) => a.provider.localeCompare(b.provider)),
+      .sort(compareProviderDisplayOrder),
+    cost: [...costByAccount.values()].sort(compareProviderDisplayOrder),
     upstreamErrors: [...new Set(upstreamErrors.filter(Boolean))]
   };
 }
