@@ -1,0 +1,78 @@
+services:
+  agent-usage-exporter:
+    build:
+      context: .
+    image: "${AGENT_USAGE_IMAGE:-leishi1313/agent-usage-web:latest}"
+    container_name: agent-usage-exporter
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m
+    ports:
+      - "${AGENT_USAGE_EXPORTER_HOST:-127.0.0.1}:${AGENT_USAGE_EXPORTER_PORT:-39174}:3000"
+    environment:
+      APP_ROLE: "exporter"
+      PORT: "3000"
+      EXPORTER_TOKEN: "${EXPORTER_TOKEN:?Set EXPORTER_TOKEN in .env}"
+      EXPORTER_REFRESH_SECONDS: "${EXPORTER_REFRESH_SECONDS:-300}"
+      EXPORTER_REFRESH_MIN_INTERVAL_SECONDS: "${EXPORTER_REFRESH_MIN_INTERVAL_SECONDS:-60}"
+      EXPORTER_SNAPSHOT_CACHE_PATH: "/home/node/.cache/agent-usage-web/exporter-snapshot.json"
+      CODEXBAR_CONFIG: "/home/node/.codexbar/config.json"
+      CODEX_HOME: "/home/node/.codex"
+      HOME: "/home/node"
+      XDG_CONFIG_HOME: "/home/node/.config"
+      XDG_CACHE_HOME: "/home/node/.cache"
+      XDG_DATA_HOME: "/home/node/.local/share"
+    volumes:
+      - "${HOME}/.codex:/home/node/.codex:ro"
+      - "${HOME}/.codexbar:/home/node/.codexbar:ro"
+      - "${HOME}/.codexbar/antigravity:/home/node/.codexbar/antigravity:rw"
+      - "${HOME}/.claude:/home/node/.claude:ro"
+      - "${HOME}/.claude/.credentials.json:/home/node/.claude/.credentials.json:rw"
+      - "${HOME}/.cursor:/home/node/.cursor:ro"
+      - "${HOME}/.gemini:/home/node/.gemini:ro"
+      - "${HOME}/.config:/home/node/.config:ro"
+      - "${HOME}/.local/share:/home/node/.local/share:ro"
+      - agent-usage-exporter-cache:/home/node/.cache/agent-usage-web:rw
+
+  agent-usage-web:
+    build:
+      context: .
+    image: "${AGENT_USAGE_IMAGE:-leishi1313/agent-usage-web:latest}"
+    container_name: agent-usage-web
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m
+    depends_on:
+      - agent-usage-exporter
+    ports:
+      - "${AGENT_USAGE_WEB_HOST:-127.0.0.1}:${AGENT_USAGE_WEB_PORT:-39173}:3000"
+    environment:
+      APP_ROLE: "web"
+      PORT: "3000"
+      WEB_ACCOUNT_DISPLAY: "${WEB_ACCOUNT_DISPLAY:-hidden}"
+      WEB_EXPORTER_POLL_SECONDS: "${WEB_EXPORTER_POLL_SECONDS:-60}"
+      WEB_STALE_AFTER_SECONDS: "${WEB_STALE_AFTER_SECONDS:-600}"
+      WEB_EXPIRED_AFTER_SECONDS: "${WEB_EXPIRED_AFTER_SECONDS:-86400}"
+      WEB_SQLITE_PATH: "/home/node/.local/share/agent-usage-web/polls.sqlite"
+      WEB_EXPORTERS_JSON: '[{"url":"http://agent-usage-exporter:3000","token":"${EXPORTER_TOKEN:?Set EXPORTER_TOKEN in .env}","name":"Local"}]'
+      HOME: "/home/node"
+      XDG_CACHE_HOME: "/home/node/.cache"
+      XDG_DATA_HOME: "/home/node/.local/share"
+    volumes:
+      - agent-usage-web-data:/home/node/.local/share/agent-usage-web:rw
+
+volumes:
+  agent-usage-exporter-cache:
+  agent-usage-web-data:
