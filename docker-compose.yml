@@ -66,7 +66,10 @@ services:
       WEB_STALE_AFTER_SECONDS: "${WEB_STALE_AFTER_SECONDS:-600}"
       WEB_EXPIRED_AFTER_SECONDS: "${WEB_EXPIRED_AFTER_SECONDS:-86400}"
       WEB_SQLITE_PATH: "/home/node/.local/share/agent-usage-web/polls.sqlite"
-      WEB_EXPORTERS_JSON: '[{"url":"http://agent-usage-exporter:3000","token":"${EXPORTER_TOKEN:?Set EXPORTER_TOKEN in .env}","name":"Local"}]'
+      WEB_EXPORTERS_JSON: "${WEB_EXPORTERS_JSON:-}"
+      WEB_EXPORTER_URL: "http://agent-usage-exporter:3000"
+      WEB_EXPORTER_TOKEN: "${EXPORTER_TOKEN:?Set EXPORTER_TOKEN in .env}"
+      WEB_EXPORTER_NAME: "Local"
       HOME: "/home/node"
       XDG_CACHE_HOME: "/home/node/.cache"
       XDG_DATA_HOME: "/home/node/.local/share"

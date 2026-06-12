@@ -9,6 +9,7 @@ The Docker image is published at:
 
 ```text
 leishi1313/agent-usage-web:latest
+leishi1313/agent-usage-web:0.1.1
 leishi1313/agent-usage-web:0.1.0
 ```
 
@@ -72,6 +73,12 @@ EXPORTER_TOKEN=replace-me
 WEB_ACCOUNT_DISPLAY=hidden
 WEB_EXPORTER_POLL_SECONDS=60
 EXPORTER_REFRESH_SECONDS=300
+```
+
+To aggregate multiple exporters, set `WEB_EXPORTERS_JSON` in `.env`:
+
+```env
+WEB_EXPORTERS_JSON=[{"url":"http://agent-usage-exporter:3000","token":"same-as-exporter-token","name":"Local"},{"url":"http://example-host:39174","token":"remote-exporter-token","name":"Remote"}]
 ```
 
 `WEB_ACCOUNT_DISPLAY=hidden` is the default. In that mode, public API responses do not include account emails or raw account IDs; the UI receives opaque per-account keys for selection and cost matching.

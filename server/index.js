@@ -587,14 +587,15 @@ async function initExporter() {
 }
 
 function readTargetConfigFromEnv() {
+  const rawJSON = process.env.WEB_EXPORTERS_JSON;
+  if (rawJSON?.trim()) return JSON.parse(rawJSON);
+
   const singleUrl = process.env.WEB_EXPORTER_URL;
   const singleToken = process.env.WEB_EXPORTER_TOKEN;
   if (singleUrl && singleToken) {
     return [{ url: singleUrl, token: singleToken, name: process.env.WEB_EXPORTER_NAME ?? null }];
   }
-  const rawJSON = process.env.WEB_EXPORTERS_JSON;
-  if (!rawJSON) return null;
-  return JSON.parse(rawJSON);
+  return null;
 }
 
 async function loadWebTargets() {
