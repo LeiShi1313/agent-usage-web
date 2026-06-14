@@ -75,6 +75,7 @@ WEB_ACCOUNT_DISPLAY=hidden
 WEB_PROVIDER_ORDER=codex,antigravity
 WEB_EXPORTER_POLL_SECONDS=60
 EXPORTER_REFRESH_SECONDS=300
+EXPORTER_CODEX_USAGE_SOURCE=oauth
 ```
 
 `WEB_PROVIDER_ORDER` controls the physical display order of provider rows/tabs in the web UI. Providers listed first appear first; unlisted providers fall back to alphabetical order after the listed providers.
@@ -86,6 +87,8 @@ WEB_EXPORTERS_JSON=[{"url":"http://agent-usage-exporter:3000","token":"same-as-e
 ```
 
 `WEB_ACCOUNT_DISPLAY=hidden` is the default. In that mode, public API responses do not include account emails or raw account IDs; the UI receives opaque per-account keys for selection and cost matching.
+
+`EXPORTER_CODEX_USAGE_SOURCE=oauth` is provider-scoped. The exporter still runs the normal all-provider usage collection, then re-queries only Codex with `--provider codex --source oauth` and replaces only Codex usage rows. Other providers keep their normal CodexBar source behavior.
 
 ## API
 

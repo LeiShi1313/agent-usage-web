@@ -21,6 +21,7 @@ services:
       EXPORTER_TOKEN: "${EXPORTER_TOKEN:?Set EXPORTER_TOKEN in .env}"
       EXPORTER_REFRESH_SECONDS: "${EXPORTER_REFRESH_SECONDS:-300}"
       EXPORTER_REFRESH_MIN_INTERVAL_SECONDS: "${EXPORTER_REFRESH_MIN_INTERVAL_SECONDS:-60}"
+      EXPORTER_CODEX_USAGE_SOURCE: "${EXPORTER_CODEX_USAGE_SOURCE:-oauth}"
       EXPORTER_SNAPSHOT_CACHE_PATH: "/home/node/.cache/agent-usage-web/exporter-snapshot.json"
       CODEXBAR_CONFIG: "/home/node/.codexbar/config.json"
       CODEX_HOME: "/home/node/.codex"

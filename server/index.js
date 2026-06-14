@@ -25,6 +25,7 @@ const EXPORTER_REFRESH_MIN_INTERVAL_SECONDS = numberEnv(process.env.EXPORTER_REF
 const EXPORTER_COMMAND_TIMEOUT_MS = numberEnv(process.env.EXPORTER_COMMAND_TIMEOUT_MS, 90_000);
 const EXPORTER_SNAPSHOT_CACHE_PATH = process.env.EXPORTER_SNAPSHOT_CACHE_PATH ??
   path.join(XDG_CACHE_HOME, 'agent-usage-web', 'exporter-snapshot.json');
+const CODEX_USAGE_SOURCES = new Set(['auto', 'web', 'cli', 'oauth', 'api']);
 const CLAUDE_CREDENTIALS_PATH = process.env.CLAUDE_CREDENTIALS_PATH ??
   path.join(HOME_DIR, '.claude', '.credentials.json');
 const CLAUDE_OAUTH_CLIENT_ID = process.env.CODEXBAR_CLAUDE_OAUTH_CLIENT_ID ??
@@ -417,6 +418,17 @@ async function validateCodexBarConfig(errors) {
   return false;
 }
 
+function configuredCodexUsageSource(errors) {
+  const source = String(process.env.EXPORTER_CODEX_USAGE_SOURCE ?? '').trim().toLowerCase();
+  if (!source) return null;
+  if (CODEX_USAGE_SOURCES.has(source)) return source;
+  errors.push(snapshotError(
+    `EXPORTER_CODEX_USAGE_SOURCE must be one of: ${[...CODEX_USAGE_SOURCES].join(', ')}`,
+    'codex-usage-source-invalid'
+  ));
+  return null;
+}
+
 function usageRecordsFromRows(rows, collectedAt, errors) {
   const usageAccountsByProvider = new Map();
   const records = [];
@@ -475,6 +487,41 @@ function costRecordsFromRows(rows, collectedAt, usageAccountsByProvider, errors)
   return records;
 }
 
+async function applyCodexUsageSourceOverride(rows, source, errors) {
+  if (!source) return rows;
+
+  try {
+    const result = await runCodexBarJSON([
+      'usage',
+      '--format',
+      'json',
+      '--json-only',
+      '--provider',
+      'codex',
+      '--source',
+      source
+    ]);
+    if (result.commandError) errors.push(snapshotError(result.commandError, 'codexbar-codex-usage-stderr'));
+
+    const codexRows = asArray(result.data).filter((row) => providerFromRow(row) === 'codex');
+    if (!codexRows.length) {
+      errors.push(snapshotError(`Codex usage source ${source} returned no rows.`, 'codex-usage-source-empty'));
+      return rows;
+    }
+
+    return [
+      ...rows.filter((row) => providerFromRow(row) !== 'codex'),
+      ...codexRows
+    ];
+  } catch (error) {
+    errors.push(snapshotError(
+      `Codex usage source ${source} failed: ${error instanceof Error ? error.message : String(error)}`,
+      'codex-usage-source-failed'
+    ));
+    return rows;
+  }
+}
+
 async function collectExporterSnapshot(reason) {
   const startedAt = nowISO();
   const errors = [];
@@ -497,7 +544,8 @@ async function collectExporterSnapshot(reason) {
   try {
     const result = await runCodexBarJSON(['usage', '--format', 'json', '--json-only']);
     if (result.commandError) errors.push(snapshotError(result.commandError, 'codexbar-usage-stderr'));
-    const usage = usageRecordsFromRows(asArray(result.data), nowISO(), errors);
+    const usageRows = await applyCodexUsageSourceOverride(asArray(result.data), configuredCodexUsageSource(errors), errors);
+    const usage = usageRecordsFromRows(usageRows, nowISO(), errors);
     records.push(...usage.records);
     usageAccountsByProvider = usage.usageAccountsByProvider;
   } catch (error) {
@@ -996,6 +1044,14 @@ function compareProviderDisplayOrder(a, b) {
   return String(a.accountKey ?? a.account ?? '').localeCompare(String(b.accountKey ?? b.account ?? ''));
 }
 
+function recordErrorMessage(record) {
+  const error = publicError(record.error);
+  if (!error) return null;
+  const provider = record.provider ?? 'unknown';
+  const kind = record.kind ?? 'record';
+  return `${provider} ${kind}: ${error.message ?? 'provider error'}`;
+}
+
 function buildDashboard(targets, cache) {
   const usageByAccount = new Map();
   const costByAccount = new Map();
@@ -1030,6 +1086,12 @@ function buildDashboard(targets, cache) {
     }
 
     for (const record of targetState.snapshot?.records ?? []) {
+      if (record.error) {
+        const message = recordErrorMessage(record);
+        if (message) upstreamErrors.push(`${target.name ?? target.url}: ${message}`);
+        continue;
+      }
+
       const key = accountAggregationKey(record, target);
       if (record.kind === 'usage') {
         const previous = usageByAccount.get(key);
