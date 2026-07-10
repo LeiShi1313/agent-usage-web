@@ -94,7 +94,7 @@ WEB_EXPORTERS_JSON=[{"url":"http://agent-usage-exporter:3000","token":"same-as-e
 
 `WEB_ACCOUNT_DISPLAY=hidden` is the default. In that mode, public API responses do not include account emails or raw account IDs; the UI receives opaque per-account keys for selection and cost matching.
 
-`EXPORTER_CODEX_USAGE_SOURCE=oauth` applies only to the Codex probe. Usage collection runs explicit `--provider codex` and `--provider antigravity` commands; cost collection is scoped to Codex. Gemini is not probed or published.
+`EXPORTER_CODEX_USAGE_SOURCE=oauth` applies only to the Codex probe. By default the exporter scrapes every **enabled** provider in `~/.codexbar/config.json` (one `codexbar usage --provider <id>` call each). Override with `EXPORTER_USAGE_PROVIDERS=codex,antigravity,grok` if you want a fixed allowlist. Cost collection defaults to Codex (`EXPORTER_COST_PROVIDER`).
 
 ## API
 

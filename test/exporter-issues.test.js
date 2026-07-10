@@ -83,6 +83,16 @@ const antigravityError = {
     message: "Missing CLI '/bin/ps'. Contact person@example.com; cache /home/node/.gemini; Bearer secret-token-value"
   }
 };
+const grokUsage = {
+  provider: 'grok',
+  source: 'grok-web',
+  account: 'grok-test',
+  usage: {
+    updatedAt: '2026-07-10T09:00:00Z',
+    primary: { usedPercent: 14 },
+    identity: { providerID: 'grok', loginMethod: 'SuperGrok', accountEmail: 'person@example.com' }
+  }
+};
 const geminiError = {
   provider: 'gemini',
   source: 'auto',
@@ -106,6 +116,8 @@ if (command === 'usage' && provider === 'codex') {
     message: "Missing CLI '/bin/ps'. Contact person@example.com; cache /home/node/.gemini"
   }) + '\\n');
   process.exitCode = 1;
+} else if (command === 'usage' && provider === 'grok') {
+  process.stdout.write(JSON.stringify([grokUsage]));
 } else if (command === 'cost' && provider === 'codex') {
   process.stdout.write(JSON.stringify([codexCost]));
 } else {
@@ -127,12 +139,14 @@ if (command === 'usage' && provider === 'codex') {
     records: [{ kind: 'usage', provider: 'gemini', error: { message: 'Deprecated Gemini probe ran' } }],
     errors: [{ code: 'usage-gemini', provider: 'gemini', message: 'Deprecated Gemini probe ran' }]
   }));
+  // Explicit allowlist keeps this regression focused on structured issues + no gemini.
   const app = startApp(t, {
     APP_ROLE: 'exporter',
     PORT: String(port),
     EXPORTER_TOKEN: token,
     EXPORTER_REFRESH_SECONDS: '0',
     EXPORTER_COMMAND_TIMEOUT_MS: '5000',
+    EXPORTER_USAGE_PROVIDERS: 'codex,antigravity',
     EXPORTER_SNAPSHOT_CACHE_PATH: snapshotPath,
     FAKE_CODEXBAR_CALLS: callsPath,
     FAKE_CODEXBAR_DELAY_MS: '150',
@@ -177,6 +191,92 @@ if (command === 'usage' && provider === 'codex') {
   assert.match(snapshot.errors[0].message, /Missing CLI '\/bin\/ps'/);
   assert.match(snapshot.errors[0].details, /Missing CLI '\/bin\/ps'/);
   assert.doesNotMatch(JSON.stringify(snapshot.errors[0]), /person@example\.com|secret-token-value|\/home\/node/);
+});
+
+test('exporter scrapes enabled CodexBar providers including grok when config drives collection', async (t) => {
+  const temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'agent-usage-exporter-config-'));
+  t.after(() => rm(temporaryDirectory, { recursive: true, force: true }));
+
+  const callsPath = path.join(temporaryDirectory, 'calls.jsonl');
+  const fakeCodexBarPath = path.join(temporaryDirectory, 'codexbar');
+  await writeFile(fakeCodexBarPath, `#!/usr/bin/env node
+import { appendFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+const command = args[0];
+const providerIndex = args.indexOf('--provider');
+const provider = providerIndex === -1 ? 'all' : args[providerIndex + 1];
+appendFileSync(process.env.FAKE_CODEXBAR_CALLS, JSON.stringify({ command, provider }) + '\\n');
+if (command === 'usage' && provider === 'grok') {
+  process.stdout.write(JSON.stringify([{
+    provider: 'grok',
+    source: 'grok-web',
+    usage: {
+      primary: { usedPercent: 14, resetsAt: '2026-07-15T00:00:00Z' },
+      identity: { providerID: 'grok', loginMethod: 'SuperGrok', accountEmail: 'person@example.com' }
+    }
+  }]));
+} else if (command === 'usage') {
+  process.stdout.write(JSON.stringify([{
+    provider,
+    source: 'oauth',
+    usage: { primary: { usedPercent: 1 }, identity: { providerID: provider, accountEmail: provider + '@example.com' } }
+  }]));
+} else if (command === 'cost') {
+  process.stdout.write(JSON.stringify([{ provider: 'codex', source: 'local', last30DaysCostUSD: 0.5 }]));
+} else {
+  process.stdout.write('[]');
+}
+`);
+  await chmod(fakeCodexBarPath, 0o755);
+
+  const configPath = path.join(temporaryDirectory, 'config.json');
+  await writeFile(configPath, JSON.stringify({
+    version: 1,
+    providers: [
+      { id: 'codex', enabled: true },
+      { id: 'antigravity', enabled: true },
+      { id: 'claude', enabled: false },
+      { id: 'grok', enabled: true }
+    ]
+  }));
+
+  const port = await reservePort();
+  const token = 'test-exporter-token-config';
+  const app = startApp(t, {
+    APP_ROLE: 'exporter',
+    PORT: String(port),
+    EXPORTER_TOKEN: token,
+    EXPORTER_REFRESH_SECONDS: '0',
+    EXPORTER_COMMAND_TIMEOUT_MS: '5000',
+    EXPORTER_SNAPSHOT_CACHE_PATH: path.join(temporaryDirectory, 'snapshot.json'),
+    CODEXBAR_CONFIG: configPath,
+    FAKE_CODEXBAR_CALLS: callsPath,
+    HOME: temporaryDirectory,
+    PATH: `${temporaryDirectory}:${process.env.PATH ?? ''}`
+  });
+
+  const snapshot = await waitForJSON(
+    `http://127.0.0.1:${port}/v1/snapshot`,
+    { headers: { Authorization: `Bearer ${token}` } },
+    (body) => body.collection?.status !== 'refreshing' && body.collection?.status !== 'initializing',
+    app.output
+  );
+  const calls = (await readFile(callsPath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+
+  assert.deepEqual(calls.map(({ command, provider }) => `${command}:${provider}`), [
+    'usage:codex',
+    'usage:antigravity',
+    'usage:grok',
+    'cost:codex'
+  ]);
+  assert.deepEqual(
+    [...new Set(snapshot.records.map((record) => record.provider))].sort(),
+    ['antigravity', 'codex', 'grok']
+  );
+  assert.equal(snapshot.records.some((record) => record.provider === 'claude'), false);
+  const grok = snapshot.records.find((record) => record.provider === 'grok' && record.kind === 'usage');
+  assert.equal(grok?.data?.usage?.primary?.usedPercent, 14);
+  assert.equal(grok?.data?.usage?.identity?.loginMethod, 'SuperGrok');
 });
 
 test('web exposes structured sanitized upstream issues while retaining the legacy summary strings', async (t) => {

@@ -25,8 +25,10 @@ const EXPORTER_REFRESH_MIN_INTERVAL_SECONDS = numberEnv(process.env.EXPORTER_REF
 const EXPORTER_COMMAND_TIMEOUT_MS = numberEnv(process.env.EXPORTER_COMMAND_TIMEOUT_MS, 90_000);
 const EXPORTER_SNAPSHOT_CACHE_PATH = process.env.EXPORTER_SNAPSHOT_CACHE_PATH ??
   path.join(XDG_CACHE_HOME, 'agent-usage-web', 'exporter-snapshot.json');
-const EXPORTER_USAGE_PROVIDERS = ['codex', 'antigravity'];
-const EXPORTER_COST_PROVIDER = 'codex';
+// Optional allowlist override. When unset, enabled providers come from CodexBar config.
+const EXPORTER_USAGE_PROVIDERS_ENV = parseProviderOrder(process.env.EXPORTER_USAGE_PROVIDERS ?? '');
+const EXPORTER_USAGE_PROVIDERS_FALLBACK = ['codex', 'antigravity'];
+const EXPORTER_COST_PROVIDER = process.env.EXPORTER_COST_PROVIDER?.trim().toLowerCase() || 'codex';
 const CODEX_USAGE_SOURCES = new Set(['auto', 'web', 'cli', 'oauth', 'api']);
 
 const WEB_ACCOUNT_DISPLAY = normalizeAccountDisplay(process.env.WEB_ACCOUNT_DISPLAY ?? 'hidden');
@@ -36,7 +38,7 @@ const WEB_EXPIRED_AFTER_SECONDS = numberEnv(process.env.WEB_EXPIRED_AFTER_SECOND
 const WEB_POLL_TIMEOUT_MS = numberEnv(process.env.WEB_POLL_TIMEOUT_MS, 75_000);
 const WEB_SQLITE_PATH = process.env.WEB_SQLITE_PATH ??
   path.join(XDG_DATA_HOME, 'agent-usage-web', 'polls.sqlite');
-const WEB_PROVIDER_ORDER = parseProviderOrder(process.env.WEB_PROVIDER_ORDER ?? 'codex,antigravity');
+const WEB_PROVIDER_ORDER = parseProviderOrder(process.env.WEB_PROVIDER_ORDER ?? 'codex,antigravity,grok');
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
@@ -394,6 +396,42 @@ async function validateCodexBarConfig(errors) {
   return false;
 }
 
+async function readCodexBarConfig() {
+  const configPath = process.env.CODEXBAR_CONFIG;
+  if (!configPath) return null;
+  const raw = JSON.parse(await fs.readFile(configPath, 'utf8'));
+  return raw && typeof raw === 'object' ? raw : null;
+}
+
+/**
+ * Resolve which providers the exporter should scrape.
+ * Preference: EXPORTER_USAGE_PROVIDERS env → enabled entries in CodexBar config → fallback.
+ */
+async function resolveUsageProviders(errors) {
+  if (EXPORTER_USAGE_PROVIDERS_ENV.length) return EXPORTER_USAGE_PROVIDERS_ENV;
+
+  try {
+    const config = await readCodexBarConfig();
+    const fromConfig = asArray(config?.providers)
+      .filter((entry) => entry && entry.id != null && entry.enabled !== false)
+      .map((entry) => String(entry.id).trim().toLowerCase())
+      .filter(Boolean);
+    // De-dupe while preserving config order.
+    const unique = [...new Set(fromConfig)];
+    if (unique.length) return unique;
+  } catch (error) {
+    if (process.env.CODEXBAR_CONFIG) {
+      errors.push(snapshotError(
+        `Failed to read usage providers from CodexBar config: ${error instanceof Error ? error.message : String(error)}`,
+        'codexbar-providers-unreadable',
+        { operation: 'config' }
+      ));
+    }
+  }
+
+  return [...EXPORTER_USAGE_PROVIDERS_FALLBACK];
+}
+
 function configuredCodexUsageSource(errors) {
   const source = String(process.env.EXPORTER_CODEX_USAGE_SOURCE ?? '').trim().toLowerCase();
   if (!source) return null;
@@ -534,7 +572,8 @@ async function collectExporterSnapshot(reason) {
   }
 
   const usageAccountsByProvider = new Map();
-  for (const provider of EXPORTER_USAGE_PROVIDERS) {
+  const usageProviders = await resolveUsageProviders(errors);
+  for (const provider of usageProviders) {
     try {
       const usage = await collectUsageProvider(provider, errors);
       records.push(...usage.records);
