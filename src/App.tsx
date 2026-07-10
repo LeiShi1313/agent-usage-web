@@ -5,29 +5,48 @@ import {
   BarChart3,
   CircleDollarSign,
   Clock3,
-  Command,
-  Cpu,
-  Gauge,
   KeyRound,
   RefreshCcw,
-  Server,
-  Sparkles,
-  Terminal
+  Server
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchDashboard, refreshDashboard } from './api';
 import type { CostPayload, DashboardPayload, ProviderPayload, RateWindow } from './types';
 
-const providerMeta: Record<string, { label: string; tint: string; icon: typeof Command }> = {
-  codex: { label: 'Codex', tint: '#49a3b0', icon: Command },
-  claude: { label: 'Claude', tint: '#d18652', icon: Sparkles },
-  cursor: { label: 'Cursor', tint: '#7c8393', icon: Cpu },
-  openai: { label: 'OpenAI', tint: '#2f8f73', icon: Gauge },
-  gemini: { label: 'Gemini', tint: '#7c74c9', icon: Sparkles }
-};
-
+/** Humanize any CodexBar provider id without a hardcoded allowlist. */
 function providerLabel(provider: string) {
-  return providerMeta[provider]?.label ?? provider.replace(/(^|-)([a-z])/g, (_, dash, letter) => `${dash ? ' ' : ''}${letter.toUpperCase()}`);
+  return String(provider || 'unknown')
+    .trim()
+    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      const lower = word.toLowerCase();
+      if (['ai', 'api', 'aws', 'gpt', 'llm', 'id', 'cli'].includes(lower)) return lower.toUpperCase();
+      if (lower === 'openai') return 'OpenAI';
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
+
+/** Stable pastel-ish brand color derived from the provider id. */
+function providerTint(provider: string) {
+  const key = String(provider || 'unknown').toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = Math.imul(31, hash) + key.charCodeAt(i);
+  }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue} 38% 44%)`;
+}
+
+function resolveProviderPresentation(provider: string) {
+  return {
+    label: providerLabel(provider),
+    tint: providerTint(provider),
+    icon: Server
+  };
 }
 
 function clampPercent(value: number | undefined | null) {
@@ -157,7 +176,7 @@ function ProviderTab({
   active: boolean;
   onClick: () => void;
 }) {
-  const meta = providerMeta[provider.provider] ?? { label: providerLabel(provider.provider), tint: '#6f7891', icon: Server };
+  const meta = resolveProviderPresentation(provider.provider);
   const Icon = meta.icon;
   const tabUsed = clampPercent(provider.usage?.primary?.usedPercent ?? provider.usage?.secondary?.usedPercent ?? 0);
   const remain = 100 - tabUsed;
@@ -174,7 +193,8 @@ function ProviderTab({
 }
 
 function ProviderDetail({ provider, cost }: { provider: ProviderPayload; cost?: CostPayload }) {
-  const meta = providerMeta[provider.provider] ?? { label: providerLabel(provider.provider), tint: '#6f7891', icon: Server };
+  const meta = resolveProviderPresentation(provider.provider);
+  const Icon = meta.icon;
   const account = provider.account ?? provider.usage?.identity?.accountEmail ?? null;
   const plan = provider.usage?.identity?.loginMethod ?? provider.source;
   const extraWindows = provider.usage?.extraRateWindows ?? [];
@@ -193,7 +213,7 @@ function ProviderDetail({ provider, cost }: { provider: ProviderPayload; cost?: 
         <div>
           <div className="flex items-center gap-3">
             <span className="provider-mark" style={{ backgroundColor: meta.tint }}>
-              <Terminal size={18} />
+              <Icon size={18} />
             </span>
             <h2 className="text-2xl font-semibold tracking-normal text-ink">{meta.label}</h2>
           </div>

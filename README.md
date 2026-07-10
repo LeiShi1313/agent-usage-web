@@ -55,16 +55,19 @@ The exporter uses CodexBar's native config:
 Provider selection should be declared there. The default compose stack mounts local agent state into the exporter only:
 
 ```text
-~/.codex                  -> /home/node/.codex:ro
+~/.codex                  -> /home/node/.codex:rw
 ~/.codexbar               -> /home/node/.codexbar:ro
 ~/.codexbar/antigravity   -> /home/node/.codexbar/antigravity:rw
 ~/.claude                 -> /home/node/.claude:ro
 ~/.claude/.credentials.json -> /home/node/.claude/.credentials.json:rw
 ~/.cursor                 -> /home/node/.cursor:ro
 ~/.gemini                 -> /home/node/.gemini:ro
+~/.grok                   -> /home/node/.grok:rw
 ~/.config                 -> /home/node/.config:ro
 ~/.local/share            -> /home/node/.local/share:ro
 ```
+
+Enable providers in `~/.codexbar/config.json` (for example `"id": "grok", "enabled": true`). Grok needs a SuperGrok login (`grok login`) so `~/.grok/auth.json` exists; the exporter puts `~/.grok/bin` on `PATH` for the Grok CLI billing path and sets `CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT=1` so CodexBar can fall back to grok.com via Chrome cookies when needed.
 
 The web role does not mount agent auth or cache directories. It only has a writable Docker volume for SQLite poll history.
 
@@ -75,7 +78,7 @@ AGENT_USAGE_WEB_PORT=39173
 AGENT_USAGE_EXPORTER_PORT=39174
 EXPORTER_TOKEN=replace-me
 WEB_ACCOUNT_DISPLAY=hidden
-WEB_PROVIDER_ORDER=codex,antigravity
+WEB_PROVIDER_ORDER=codex,antigravity,grok
 WEB_EXPORTER_POLL_SECONDS=60
 EXPORTER_REFRESH_SECONDS=300
 EXPORTER_CODEX_USAGE_SOURCE=oauth

@@ -25,18 +25,26 @@ services:
       EXPORTER_SNAPSHOT_CACHE_PATH: "/home/node/.cache/agent-usage-web/exporter-snapshot.json"
       CODEXBAR_CONFIG: "/home/node/.codexbar/config.json"
       CODEX_HOME: "/home/node/.codex"
+      GROK_HOME: "/home/node/.grok"
+      # CodexBar Grok uses `grok` on PATH (CLI billing RPC) and may fall back to
+      # grok.com via browser cookies when CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT=1.
+      PATH: "/home/node/.grok/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT: "${CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT:-1}"
       HOME: "/home/node"
       XDG_CONFIG_HOME: "/home/node/.config"
       XDG_CACHE_HOME: "/home/node/.cache"
       XDG_DATA_HOME: "/home/node/.local/share"
     volumes:
-      - "${HOME}/.codex:/home/node/.codex:ro"
+      # Codex OAuth rotates refresh tokens during collection; this mount must be writable.
+      - "${HOME}/.codex:/home/node/.codex:rw"
       - "${HOME}/.codexbar:/home/node/.codexbar:ro"
       - "${HOME}/.codexbar/antigravity:/home/node/.codexbar/antigravity:rw"
       - "${HOME}/.claude:/home/node/.claude:ro"
       - "${HOME}/.claude/.credentials.json:/home/node/.claude/.credentials.json:rw"
       - "${HOME}/.cursor:/home/node/.cursor:ro"
       - "${HOME}/.gemini:/home/node/.gemini:ro"
+      # Grok SuperGrok OAuth + local sessions; grok CLI may refresh auth.json.
+      - "${HOME}/.grok:/home/node/.grok:rw"
       - "${HOME}/.config:/home/node/.config:ro"
       - "${HOME}/.local/share:/home/node/.local/share:ro"
       - agent-usage-exporter-cache:/home/node/.cache/agent-usage-web:rw
@@ -63,7 +71,7 @@ services:
       APP_ROLE: "web"
       PORT: "3000"
       WEB_ACCOUNT_DISPLAY: "${WEB_ACCOUNT_DISPLAY:-hidden}"
-      WEB_PROVIDER_ORDER: "${WEB_PROVIDER_ORDER:-codex,antigravity}"
+      WEB_PROVIDER_ORDER: "${WEB_PROVIDER_ORDER:-codex,antigravity,grok}"
       WEB_EXPORTER_POLL_SECONDS: "${WEB_EXPORTER_POLL_SECONDS:-60}"
       WEB_STALE_AFTER_SECONDS: "${WEB_STALE_AFTER_SECONDS:-600}"
       WEB_EXPIRED_AFTER_SECONDS: "${WEB_EXPIRED_AFTER_SECONDS:-86400}"
