@@ -9,10 +9,13 @@ The Docker image is published at:
 
 ```text
 leishi1313/agent-usage-web:latest
+leishi1313/agent-usage-web:0.1.3
 leishi1313/agent-usage-web:0.1.2
 leishi1313/agent-usage-web:0.1.1
 leishi1313/agent-usage-web:0.1.0
 ```
+
+The same image runs both services. Compose selects the `exporter` or `web` process with `APP_ROLE`.
 
 ## Run
 
