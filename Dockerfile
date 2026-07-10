@@ -16,7 +16,7 @@ ENV NODE_ENV=production \
     CODEXBAR_VERSION=${CODEXBAR_VERSION}
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl tar git libsqlite3-0 \
+    && apt-get install -y --no-install-recommends ca-certificates curl tar git libsqlite3-0 procps \
     && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g @openai/codex@latest @anthropic-ai/claude-code@latest
