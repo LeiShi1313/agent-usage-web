@@ -1,3 +1,3 @@
 # Use CodexBar Config As Provider Configuration
 
-Exporter provider selection and provider-specific settings use CodexBar's native config as the source of truth. We deliberately avoid an exporter-specific provider DSL because CodexBar already owns source modes, cookie settings, token accounts, API keys, regions, and provider-specific fields. The trade-off is that exporter deployment must understand and mount a CodexBar config file, but this keeps the exporter from translating or duplicating the underlying collector's configuration model.
+The exporter collects only Codex and Antigravity, while provider-specific settings continue to use CodexBar's native config as the source of truth. Explicit provider-scoped commands prevent unrelated or deprecated probes such as Gemini from affecting a snapshot. The trade-off is that adding another provider now requires an intentional exporter change rather than only a CodexBar toggle.

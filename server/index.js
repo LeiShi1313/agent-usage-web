@@ -25,12 +25,9 @@ const EXPORTER_REFRESH_MIN_INTERVAL_SECONDS = numberEnv(process.env.EXPORTER_REF
 const EXPORTER_COMMAND_TIMEOUT_MS = numberEnv(process.env.EXPORTER_COMMAND_TIMEOUT_MS, 90_000);
 const EXPORTER_SNAPSHOT_CACHE_PATH = process.env.EXPORTER_SNAPSHOT_CACHE_PATH ??
   path.join(XDG_CACHE_HOME, 'agent-usage-web', 'exporter-snapshot.json');
+const EXPORTER_USAGE_PROVIDERS = ['codex', 'antigravity'];
+const EXPORTER_COST_PROVIDER = 'codex';
 const CODEX_USAGE_SOURCES = new Set(['auto', 'web', 'cli', 'oauth', 'api']);
-const CLAUDE_CREDENTIALS_PATH = process.env.CLAUDE_CREDENTIALS_PATH ??
-  path.join(HOME_DIR, '.claude', '.credentials.json');
-const CLAUDE_OAUTH_CLIENT_ID = process.env.CODEXBAR_CLAUDE_OAUTH_CLIENT_ID ??
-  '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
-const CLAUDE_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 
 const WEB_ACCOUNT_DISPLAY = normalizeAccountDisplay(process.env.WEB_ACCOUNT_DISPLAY ?? 'hidden');
 const WEB_EXPORTER_POLL_SECONDS = numberEnv(process.env.WEB_EXPORTER_POLL_SECONDS, 60);
@@ -40,8 +37,6 @@ const WEB_POLL_TIMEOUT_MS = numberEnv(process.env.WEB_POLL_TIMEOUT_MS, 75_000);
 const WEB_SQLITE_PATH = process.env.WEB_SQLITE_PATH ??
   path.join(XDG_DATA_HOME, 'agent-usage-web', 'polls.sqlite');
 const WEB_PROVIDER_ORDER = parseProviderOrder(process.env.WEB_PROVIDER_ORDER ?? 'codex,antigravity');
-
-let claudeRefreshPromise = null;
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
@@ -139,20 +134,31 @@ function redactText(value) {
   if (typeof value !== 'string') return value == null ? '' : String(value);
   return value
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer <redacted>')
-    .replace(/\b((?:access|refresh|id)[_-]?token)\b\s*[:=]\s*["']?[^"',\s}]+/gi, '$1: <redacted>')
+    .replace(/\b((?:access|refresh|id|session)[_-]?token|api[_-]?key|client[_-]?secret|password|authorization|cookie)\b\s*[:=]\s*["']?[^"',\s}]+/gi, '$1: <redacted>')
+    .replace(/([?&](?:api[_-]?key|token|secret|password|authorization)=)[^&#\s]+/gi, '$1<redacted>')
     .replace(/sk-[A-Za-z0-9_-]{20,}/g, '<redacted-openai-key>')
     .replace(/sk-ant-[A-Za-z0-9_-]{20,}/g, '<redacted-anthropic-token>')
     .replace(/eyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{8,}/g, '<redacted-jwt>')
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '<redacted-email>')
-    .replace(/\/home\/(?:node|lei)\/[^\s"',)]+/g, '/home/<redacted>');
+    .replace(/\/home\/[^/\s]+\/[^\s"',)]+/g, '/home/<redacted>')
+    .replace(/\/Users\/[^/\s]+\/[^\s"',)]+/g, '/Users/<redacted>')
+    .replace(/[A-Z]:\\Users\\[^\\\s]+\\[^\s"',)]+/gi, 'C:\\Users\\<redacted>');
+}
+
+function publicText(value, fallback = 'Upstream error') {
+  const normalized = redactText(value)
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return (normalized || fallback).slice(0, 800);
 }
 
 function publicError(error) {
   if (!error) return null;
-  if (typeof error === 'string') return { message: redactText(error) };
+  if (typeof error === 'string') return { message: publicText(error) };
   return {
-    message: redactText(error.message ?? error.description ?? 'Upstream error'),
-    description: error.description ? redactText(error.description) : undefined,
+    message: publicText(error.message ?? error.description),
+    description: error.description ? publicText(error.description) : undefined,
     code: error.code
   };
 }
@@ -269,12 +275,32 @@ function cloneJSON(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
 
-function snapshotError(message, code) {
-  return {
-    message: redactText(message),
+function snapshotError(message, code, { provider = null, operation = 'collection', details = null } = {}) {
+  const issue = {
+    message: publicText(message),
     code,
+    provider,
+    operation,
     at: nowISO()
   };
+  if (details) issue.details = publicText(details);
+  return issue;
+}
+
+function collectorLogDetail(value) {
+  const messages = String(value ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        const entry = JSON.parse(line);
+        return entry?.message ?? entry?.description ?? line;
+      } catch {
+        return line;
+      }
+    });
+  return publicText([...new Set(messages)].join(' · '), 'Collector command reported an error.');
 }
 
 async function runCodexBarJSON(args, timeoutMs = EXPORTER_COMMAND_TIMEOUT_MS) {
@@ -306,64 +332,6 @@ async function runCodexBarJSON(args, timeoutMs = EXPORTER_COMMAND_TIMEOUT_MS) {
   }
 }
 
-async function refreshClaudeOAuthCredentialsCore() {
-  let raw;
-  try {
-    raw = JSON.parse(await fs.readFile(CLAUDE_CREDENTIALS_PATH, 'utf8'));
-  } catch {
-    return { refreshed: false, reason: 'missing' };
-  }
-
-  const oauth = raw?.claudeAiOauth;
-  const expiresAt = typeof oauth?.expiresAt === 'number' ? oauth.expiresAt : 0;
-  const refreshToken = typeof oauth?.refreshToken === 'string' ? oauth.refreshToken.trim() : '';
-  if (!refreshToken) return { refreshed: false, reason: 'no-refresh-token' };
-  if (expiresAt > Date.now() + CLAUDE_REFRESH_WINDOW_MS) {
-    return { refreshed: false, reason: 'fresh' };
-  }
-
-  const body = new URLSearchParams({
-    grant_type: 'refresh_token',
-    refresh_token: refreshToken,
-    client_id: CLAUDE_OAUTH_CLIENT_ID
-  });
-  const response = await fetch('https://platform.claude.com/v1/oauth/token', {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body
-  });
-  const json = await response.json().catch(() => null);
-  if (!response.ok || !json || typeof json.access_token !== 'string') {
-    const code = typeof json?.error === 'string' ? json.error : `HTTP ${response.status}`;
-    return { refreshed: false, reason: `refresh-failed:${redactText(code)}` };
-  }
-
-  const expiresIn = typeof json.expires_in === 'number' ? json.expires_in : 3600;
-  raw.claudeAiOauth = {
-    ...oauth,
-    accessToken: json.access_token,
-    refreshToken: typeof json.refresh_token === 'string' && json.refresh_token ? json.refresh_token : refreshToken,
-    expiresAt: Date.now() + expiresIn * 1000,
-    scopes: typeof json.scope === 'string' ? json.scope.split(/\s+/).filter(Boolean) : oauth.scopes,
-    rateLimitTier: json.rate_limit_tier ?? oauth.rateLimitTier,
-    subscriptionType: json.subscription_type ?? oauth.subscriptionType
-  };
-
-  await fs.writeFile(CLAUDE_CREDENTIALS_PATH, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
-  await fs.chmod(CLAUDE_CREDENTIALS_PATH, 0o600).catch(() => {});
-  return { refreshed: true, reason: 'refreshed' };
-}
-
-async function refreshClaudeOAuthCredentialsIfPresent() {
-  claudeRefreshPromise ??= refreshClaudeOAuthCredentialsCore().finally(() => {
-    claudeRefreshPromise = null;
-  });
-  return claudeRefreshPromise;
-}
-
 function makeSnapshot({ status = 'initializing', records = [], errors = [], startedAt = null, finishedAt = null } = {}) {
   const generatedAt = nowISO();
   return {
@@ -392,7 +360,15 @@ async function loadExporterSnapshotCache() {
   try {
     const raw = JSON.parse(await fs.readFile(EXPORTER_SNAPSHOT_CACHE_PATH, 'utf8'));
     if (raw && raw.schemaVersion === 1 && Array.isArray(raw.records)) {
-      exporterSnapshot = raw;
+      exporterSnapshot = {
+        ...raw,
+        records: raw.records.filter((record) => providerFromRow(record) !== 'gemini'),
+        errors: asArray(raw.errors).filter((error) => (
+          String(error?.provider ?? '').toLowerCase() !== 'gemini' &&
+          !String(error?.code ?? '').toLowerCase().includes('gemini') &&
+          !/\bgemini\b/i.test(String(error?.message ?? ''))
+        ))
+      };
     }
   } catch {
     // A missing exporter cache is normal on first boot.
@@ -424,7 +400,8 @@ function configuredCodexUsageSource(errors) {
   if (CODEX_USAGE_SOURCES.has(source)) return source;
   errors.push(snapshotError(
     `EXPORTER_CODEX_USAGE_SOURCE must be one of: ${[...CODEX_USAGE_SOURCES].join(', ')}`,
-    'codex-usage-source-invalid'
+    'codex-usage-source-invalid',
+    { provider: 'codex', operation: 'config' }
   ));
   return null;
 }
@@ -454,7 +431,11 @@ function usageRecordsFromRows(rows, collectedAt, errors) {
       usageAccountsByProvider.set(provider, accounts);
     }
     if (error) {
-      errors.push(snapshotError(`${provider} usage: ${error.message ?? 'provider error'}`, `usage-${provider}`));
+      errors.push(snapshotError(
+        `${provider} usage: ${error.message ?? 'provider error'}`,
+        `usage-${provider}`,
+        { provider, operation: 'usage' }
+      ));
     }
   }
 
@@ -481,45 +462,62 @@ function costRecordsFromRows(rows, collectedAt, usageAccountsByProvider, errors)
       error
     });
     if (error) {
-      errors.push(snapshotError(`${provider} cost: ${error.message ?? 'provider error'}`, `cost-${provider}`));
+      errors.push(snapshotError(
+        `${provider} cost: ${error.message ?? 'provider error'}`,
+        `cost-${provider}`,
+        { provider, operation: 'cost' }
+      ));
     }
   }
   return records;
 }
 
-async function applyCodexUsageSourceOverride(rows, source, errors) {
-  if (!source) return rows;
-
-  try {
-    const result = await runCodexBarJSON([
-      'usage',
-      '--format',
-      'json',
-      '--json-only',
-      '--provider',
-      'codex',
-      '--source',
-      source
-    ]);
-    if (result.commandError) errors.push(snapshotError(result.commandError, 'codexbar-codex-usage-stderr'));
-
-    const codexRows = asArray(result.data).filter((row) => providerFromRow(row) === 'codex');
-    if (!codexRows.length) {
-      errors.push(snapshotError(`Codex usage source ${source} returned no rows.`, 'codex-usage-source-empty'));
-      return rows;
+function mergeUsageAccounts(target, source) {
+  for (const [provider, accounts] of source) {
+    const existing = target.get(provider) ?? [];
+    for (const account of accounts) {
+      if (!existing.some((item) => item.key === account.key)) existing.push(account);
     }
-
-    return [
-      ...rows.filter((row) => providerFromRow(row) !== 'codex'),
-      ...codexRows
-    ];
-  } catch (error) {
-    errors.push(snapshotError(
-      `Codex usage source ${source} failed: ${error instanceof Error ? error.message : String(error)}`,
-      'codex-usage-source-failed'
-    ));
-    return rows;
+    target.set(provider, existing);
   }
+}
+
+async function collectUsageProvider(provider, errors) {
+  const args = ['usage', '--format', 'json', '--json-only', '--provider', provider];
+  if (provider === 'codex') {
+    const source = configuredCodexUsageSource(errors);
+    if (source) args.push('--source', source);
+  }
+
+  const result = await runCodexBarJSON(args);
+  const rows = asArray(result.data).map((row) => ({ ...row, provider }));
+  const errorsBeforeRows = errors.length;
+  const usage = usageRecordsFromRows(rows, nowISO(), errors);
+  let providerIssue = errors.slice(errorsBeforeRows).find((issue) => (
+    issue.provider === provider && issue.operation === 'usage'
+  ));
+
+  if (result.commandError) {
+    const details = collectorLogDetail(result.commandError);
+    if (providerIssue) {
+      providerIssue.details = details;
+    } else {
+      providerIssue = snapshotError(details, `codexbar-${provider}-usage-stderr`, {
+        provider,
+        operation: 'usage'
+      });
+      errors.push(providerIssue);
+    }
+  }
+
+  if (!rows.length && !providerIssue) {
+    errors.push(snapshotError(`${provider} usage returned no data.`, `usage-${provider}-empty`, {
+      provider,
+      operation: 'usage'
+    }));
+  }
+
+  return usage;
 }
 
 async function collectExporterSnapshot(reason) {
@@ -535,29 +533,51 @@ async function collectExporterSnapshot(reason) {
     return snapshot;
   }
 
-  const claudeRefresh = await refreshClaudeOAuthCredentialsIfPresent();
-  if (claudeRefresh.reason?.startsWith('refresh-failed:')) {
-    errors.push(snapshotError(`Claude OAuth refresh failed: ${claudeRefresh.reason.slice('refresh-failed:'.length)}`, 'claude-refresh-failed'));
-  }
-
-  let usageAccountsByProvider = new Map();
-  try {
-    const result = await runCodexBarJSON(['usage', '--format', 'json', '--json-only']);
-    if (result.commandError) errors.push(snapshotError(result.commandError, 'codexbar-usage-stderr'));
-    const usageRows = await applyCodexUsageSourceOverride(asArray(result.data), configuredCodexUsageSource(errors), errors);
-    const usage = usageRecordsFromRows(usageRows, nowISO(), errors);
-    records.push(...usage.records);
-    usageAccountsByProvider = usage.usageAccountsByProvider;
-  } catch (error) {
-    errors.push(snapshotError(error instanceof Error ? error.message : String(error), 'codexbar-usage-failed'));
+  const usageAccountsByProvider = new Map();
+  for (const provider of EXPORTER_USAGE_PROVIDERS) {
+    try {
+      const usage = await collectUsageProvider(provider, errors);
+      records.push(...usage.records);
+      mergeUsageAccounts(usageAccountsByProvider, usage.usageAccountsByProvider);
+    } catch (error) {
+      errors.push(snapshotError(
+        `${provider} usage collection failed: ${error instanceof Error ? error.message : String(error)}`,
+        `usage-${provider}-failed`,
+        { provider, operation: 'usage' }
+      ));
+    }
   }
 
   try {
-    const result = await runCodexBarJSON(['cost', '--format', 'json', '--json-only']);
-    if (result.commandError) errors.push(snapshotError(result.commandError, 'codexbar-cost-stderr'));
-    records.push(...costRecordsFromRows(asArray(result.data), nowISO(), usageAccountsByProvider, errors));
+    const result = await runCodexBarJSON([
+      'cost',
+      '--format',
+      'json',
+      '--json-only',
+      '--provider',
+      EXPORTER_COST_PROVIDER
+    ]);
+    const costRows = asArray(result.data).map((row) => ({ ...row, provider: EXPORTER_COST_PROVIDER }));
+    const errorsBeforeRows = errors.length;
+    records.push(...costRecordsFromRows(costRows, nowISO(), usageAccountsByProvider, errors));
+    const costIssue = errors.slice(errorsBeforeRows).find((issue) => issue.operation === 'cost');
+    if (result.commandError) {
+      const details = collectorLogDetail(result.commandError);
+      if (costIssue) {
+        costIssue.details = details;
+      } else {
+        errors.push(snapshotError(details, 'codexbar-codex-cost-stderr', {
+          provider: EXPORTER_COST_PROVIDER,
+          operation: 'cost'
+        }));
+      }
+    }
   } catch (error) {
-    errors.push(snapshotError(error instanceof Error ? error.message : String(error), 'codexbar-cost-failed'));
+    errors.push(snapshotError(
+      `codex cost collection failed: ${error instanceof Error ? error.message : String(error)}`,
+      'cost-codex-failed',
+      { provider: EXPORTER_COST_PROVIDER, operation: 'cost' }
+    ));
   }
 
   const finishedAt = nowISO();
@@ -1044,19 +1064,67 @@ function compareProviderDisplayOrder(a, b) {
   return String(a.accountKey ?? a.account ?? '').localeCompare(String(b.accountKey ?? b.account ?? ''));
 }
 
-function recordErrorMessage(record) {
-  const error = publicError(record.error);
-  if (!error) return null;
-  const provider = record.provider ?? 'unknown';
-  const kind = record.kind ?? 'record';
-  return `${provider} ${kind}: ${error.message ?? 'provider error'}`;
+function publicTargetName(target) {
+  if (target.name) return publicText(target.name, 'Exporter').slice(0, 120);
+  try {
+    return new URL(target.url).origin;
+  } catch {
+    return 'Exporter';
+  }
+}
+
+function issueCode(value, fallback = 'upstream-error') {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9-]{0,79}$/.test(normalized) ? normalized : fallback;
+}
+
+function issueProvider(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9-]{0,39}$/.test(normalized) ? normalized : null;
+}
+
+function issueOperation(value, fallback = 'collection') {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return ['collection', 'config', 'cost', 'poll', 'refresh', 'usage'].includes(normalized)
+    ? normalized
+    : fallback;
+}
+
+function issueTimestamp(value, fallback = null) {
+  const timestamp = value ? new Date(value).getTime() : Number.NaN;
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : fallback;
+}
+
+function publicUpstreamIssue(source, error, defaults = {}) {
+  const publicDetails = error?.details ? publicText(error.details) : null;
+  return {
+    source,
+    code: issueCode(error?.code, defaults.code),
+    message: publicText(error?.message ?? error?.description),
+    provider: issueProvider(error?.provider ?? defaults.provider),
+    operation: issueOperation(error?.operation, defaults.operation),
+    occurredAt: issueTimestamp(error?.at ?? error?.occurredAt, defaults.occurredAt ?? null),
+    ...(publicDetails ? { details: publicDetails } : {})
+  };
+}
+
+function upstreamIssueKey(issue) {
+  return [issue.source, issue.code, issue.provider, issue.operation, issue.message].join('\u0000');
 }
 
 function buildDashboard(targets, cache) {
   const usageByAccount = new Map();
   const costByAccount = new Map();
-  const upstreamErrors = [];
+  const upstreamIssues = [];
+  const upstreamIssueKeys = new Set();
   const sourceStates = [];
+
+  function addUpstreamIssue(issue) {
+    const key = upstreamIssueKey(issue);
+    if (upstreamIssueKeys.has(key)) return;
+    upstreamIssueKeys.add(key);
+    upstreamIssues.push(issue);
+  }
 
   for (const target of targets) {
     const targetState = cache.get(target.url) ?? {
@@ -1066,10 +1134,11 @@ function buildDashboard(targets, cache) {
       lastAttemptAt: null,
       lastError: null
     };
+    const source = publicTargetName(target);
     const stale = ageMs(targetState.lastSuccessAt) > WEB_STALE_AFTER_SECONDS * 1000;
     const expired = ageMs(targetState.lastSuccessAt) > WEB_EXPIRED_AFTER_SECONDS * 1000;
     sourceStates.push({
-      name: target.name ?? target.url,
+      name: source,
       lastSuccessAt: targetState.lastSuccessAt,
       lastAttemptAt: targetState.lastAttemptAt,
       stale,
@@ -1079,16 +1148,38 @@ function buildDashboard(targets, cache) {
     });
 
     if (targetState.lastError) {
-      upstreamErrors.push(`${target.name ?? target.url}: ${targetState.lastError.message}`);
+      addUpstreamIssue(publicUpstreamIssue(source, targetState.lastError, {
+        code: 'fetch-failed',
+        operation: 'poll',
+        occurredAt: targetState.lastAttemptAt
+      }));
     }
-    for (const error of targetState.snapshot?.errors ?? []) {
-      upstreamErrors.push(`${target.name ?? target.url}: ${error.message ?? 'exporter collection error'}`);
+
+    const snapshotErrors = targetState.snapshot?.errors ?? [];
+    const hasStructuredUsageError = snapshotErrors.some((error) => /^usage-[a-z0-9-]+$/.test(String(error?.code ?? '')));
+    for (const error of snapshotErrors) {
+      if (error?.code === 'codexbar-usage-stderr' && hasStructuredUsageError) continue;
+      addUpstreamIssue(publicUpstreamIssue(source, error, {
+        code: 'exporter-collection-error',
+        operation: 'collection',
+        occurredAt: targetState.snapshot?.generatedAt ?? targetState.lastSuccessAt
+      }));
     }
 
     for (const record of targetState.snapshot?.records ?? []) {
       if (record.error) {
-        const message = recordErrorMessage(record);
-        if (message) upstreamErrors.push(`${target.name ?? target.url}: ${message}`);
+        const provider = issueProvider(record.provider);
+        const operation = issueOperation(record.kind);
+        const code = issueCode(`${operation}-${provider ?? 'unknown'}`);
+        const alreadyReported = upstreamIssues.some((issue) => issue.source === source && issue.code === code);
+        if (!alreadyReported) {
+          addUpstreamIssue(publicUpstreamIssue(source, record.error, {
+            code,
+            provider,
+            operation,
+            occurredAt: record.collectedAt ?? targetState.lastSuccessAt
+          }));
+        }
         continue;
       }
 
@@ -1109,7 +1200,15 @@ function buildDashboard(targets, cache) {
   const staleSources = sourceStates.filter((source) => source.stale && source.lastSuccessAt).length;
   const expiredSources = sourceStates.filter((source) => source.expired && source.lastSuccessAt).length;
   const configuredSources = targets.length;
-  if (!configuredSources) upstreamErrors.push('No exporters configured.');
+  if (!configuredSources) {
+    addUpstreamIssue(publicUpstreamIssue('Web aggregator', {
+      code: 'no-exporters-configured',
+      message: 'No exporters configured.',
+      operation: 'config'
+    }));
+  }
+
+  const upstreamErrors = upstreamIssues.map((issue) => `${issue.source}: ${issue.message}`);
 
   return {
     mode: 'live',
@@ -1132,7 +1231,8 @@ function buildDashboard(targets, cache) {
       .map(({ record, targetState }) => publicUsage(record, targetState))
       .sort(compareProviderDisplayOrder),
     cost: [...costByAccount.values()].sort(compareProviderDisplayOrder),
-    upstreamErrors: [...new Set(upstreamErrors.filter(Boolean))]
+    upstreamIssues,
+    upstreamErrors
   };
 }
 

@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  ChevronDown,
   CircleDollarSign,
   Clock3,
   KeyRound,
@@ -10,10 +11,9 @@ import {
   Server
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { fetchDashboard, refreshDashboard } from './api';
-import type { CostPayload, DashboardPayload, ProviderPayload, RateWindow } from './types';
-
 /** Humanize any CodexBar provider id without a hardcoded allowlist. */
+import { fetchDashboard, refreshDashboard } from './api';
+import type { CostPayload, DashboardPayload, ProviderPayload, RateWindow, UpstreamIssue } from './types';
 function providerLabel(provider: string) {
   return String(provider || 'unknown')
     .trim()
@@ -304,6 +304,46 @@ function SummaryStrip({ data }: { data: DashboardPayload }) {
   );
 }
 
+function ExporterIssues({ issues }: { issues: UpstreamIssue[] }) {
+  return (
+    <aside aria-label="Exporter issues">
+      <details className="issue-disclosure">
+        <summary className="issue-summary">
+          <span className="issue-summary-label">
+            <AlertTriangle aria-hidden="true" size={18} />
+            Exporters reported {issues.length} upstream issue{issues.length === 1 ? '' : 's'}.
+          </span>
+          <ChevronDown className="issue-chevron" aria-hidden="true" size={18} />
+        </summary>
+
+        <div className="issue-body">
+          <p className="issue-intro">Collector errors reported by each source. Sensitive values are removed by the exporter.</p>
+          <ul className="issue-list">
+            {issues.map((issue, index) => (
+              <li className="issue-item" key={`${issue.source}:${issue.code}:${issue.provider ?? 'exporter'}:${index}`}>
+                <div className="issue-item-header">
+                  <strong>{issue.source}</strong>
+                  <span className="issue-context">
+                    {issue.provider ? providerLabel(issue.provider) : 'Exporter'} · {issue.operation}
+                  </span>
+                </div>
+                <p className="issue-message">{issue.message}</p>
+                {issue.details && issue.details !== issue.message ? (
+                  <p className="issue-details">Collector detail: {issue.details}</p>
+                ) : null}
+                <div className="issue-item-footer">
+                  <code>{issue.code}</code>
+                  {issue.occurredAt ? <time dateTime={issue.occurredAt}>{formatTime(issue.occurredAt)}</time> : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </details>
+    </aside>
+  );
+}
+
 export default function App() {
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -406,11 +446,7 @@ export default function App() {
           </AnimatePresence>
         </div>
 
-        {data?.upstreamErrors.length ? (
-          <footer className="rounded-[8px] border border-amber-300/50 bg-amber-50/80 px-4 py-3 text-sm text-amber-950">
-            Exporters reported {data.upstreamErrors.length} upstream issue{data.upstreamErrors.length === 1 ? '' : 's'}.
-          </footer>
-        ) : null}
+        {data?.upstreamIssues.length ? <ExporterIssues issues={data.upstreamIssues} /> : null}
       </section>
     </main>
   );

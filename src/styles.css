@@ -268,4 +268,125 @@ body {
     padding: 0.85rem 1rem;
     color: #6d371c;
   }
+
+  .issue-disclosure {
+    overflow: hidden;
+    border: 1px solid rgba(181, 107, 62, 0.28);
+    border-radius: 8px;
+    background: rgba(255, 247, 237, 0.82);
+    color: #5f321d;
+    box-shadow: 0 10px 28px rgba(109, 55, 28, 0.08);
+  }
+
+  .issue-summary {
+    display: flex;
+    min-height: 3rem;
+    cursor: pointer;
+    list-style: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 650;
+  }
+
+  .issue-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .issue-summary:hover {
+    background: rgba(255, 255, 255, 0.32);
+  }
+
+  .issue-summary:focus-visible {
+    outline: 3px solid rgba(47, 114, 232, 0.42);
+    outline-offset: -3px;
+  }
+
+  .issue-summary-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .issue-chevron {
+    flex: none;
+    transition: transform 160ms ease;
+  }
+
+  .issue-disclosure[open] .issue-chevron {
+    transform: rotate(180deg);
+  }
+
+  .issue-body {
+    border-top: 1px solid rgba(181, 107, 62, 0.2);
+    padding: 0.9rem 1rem 1rem;
+  }
+
+  .issue-intro {
+    font-size: 0.82rem;
+    color: rgba(95, 50, 29, 0.72);
+  }
+
+  .issue-list {
+    margin-top: 0.75rem;
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .issue-item {
+    min-width: 0;
+    border: 1px solid rgba(181, 107, 62, 0.18);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.48);
+    padding: 0.8rem;
+  }
+
+  .issue-item-header,
+  .issue-item-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.35rem 0.8rem;
+  }
+
+  .issue-item-header {
+    font-size: 0.82rem;
+  }
+
+  .issue-context,
+  .issue-item-footer {
+    color: rgba(95, 50, 29, 0.62);
+  }
+
+  .issue-context {
+    text-transform: capitalize;
+  }
+
+  .issue-message {
+    margin-top: 0.45rem;
+    overflow-wrap: anywhere;
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  .issue-details {
+    margin-top: 0.4rem;
+    overflow-wrap: anywhere;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: rgba(95, 50, 29, 0.74);
+  }
+
+  .issue-item-footer {
+    margin-top: 0.65rem;
+    font-size: 0.75rem;
+  }
+
+  .issue-item-footer code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    overflow-wrap: anywhere;
+  }
 }

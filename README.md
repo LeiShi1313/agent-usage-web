@@ -2,7 +2,7 @@
 
 Usage and cost dashboard for local AI agents. The app is split into two roles:
 
-- `exporter`: runs CodexBar against local agent state and serves a token-protected usage snapshot.
+- `exporter`: collects Codex and Antigravity through CodexBar and serves a token-protected usage snapshot.
 - `web`: polls one or more exporters, stores raw poll history in SQLite, aggregates by provider account, and serves the dashboard.
 
 The Docker image is published at:
@@ -46,13 +46,13 @@ http://127.0.0.1:39174
 
 ## Configuration
 
-The exporter uses CodexBar's native config:
+The exporter uses CodexBar's native config for provider-specific settings:
 
 ```text
 ~/.codexbar/config.json -> /home/node/.codexbar/config.json:ro
 ```
 
-Provider selection should be declared there. The default compose stack mounts local agent state into the exporter only:
+Collection is intentionally scoped to Codex and Antigravity. The default compose stack mounts local agent state into the exporter only:
 
 ```text
 ~/.codex                  -> /home/node/.codex:rw
@@ -61,8 +61,8 @@ Provider selection should be declared there. The default compose stack mounts lo
 ~/.claude                 -> /home/node/.claude:ro
 ~/.claude/.credentials.json -> /home/node/.claude/.credentials.json:rw
 ~/.cursor                 -> /home/node/.cursor:ro
-~/.gemini                 -> /home/node/.gemini:ro
 ~/.grok                   -> /home/node/.grok:rw
+~/.gemini                 -> /home/node/.gemini:ro  # Antigravity state uses this upstream path
 ~/.config                 -> /home/node/.config:ro
 ~/.local/share            -> /home/node/.local/share:ro
 ```
@@ -94,7 +94,7 @@ WEB_EXPORTERS_JSON=[{"url":"http://agent-usage-exporter:3000","token":"same-as-e
 
 `WEB_ACCOUNT_DISPLAY=hidden` is the default. In that mode, public API responses do not include account emails or raw account IDs; the UI receives opaque per-account keys for selection and cost matching.
 
-`EXPORTER_CODEX_USAGE_SOURCE=oauth` is provider-scoped. The exporter still runs the normal all-provider usage collection, then re-queries only Codex with `--provider codex --source oauth` and replaces only Codex usage rows. Other providers keep their normal CodexBar source behavior.
+`EXPORTER_CODEX_USAGE_SOURCE=oauth` applies only to the Codex probe. Usage collection runs explicit `--provider codex` and `--provider antigravity` commands; cost collection is scoped to Codex. Gemini is not probed or published.
 
 ## API
 
@@ -114,12 +114,13 @@ GET  /api/dashboard
 POST /api/refresh
 ```
 
-The web service stores every exporter poll attempt in SQLite, including both successful snapshots and failure records. There is no fake or demo data path.
+The web service stores every exporter poll attempt in SQLite, including both successful snapshots and failure records. `/api/dashboard` includes structured, sanitized `upstreamIssues` for the expandable error disclosure and retains `upstreamErrors` as legacy summary strings. There is no fake or demo data path.
 
 ## Development
 
 ```bash
 npm install
+npm test
 npm run build
 node --check server/index.js
 docker compose up -d --build

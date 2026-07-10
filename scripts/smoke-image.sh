@@ -39,6 +39,7 @@ codexbar_version="$(
 )"
 test -n "$codexbar_version"
 test "$(docker run --rm --entrypoint codexbar "$image" --version)" = "CodexBar ${codexbar_version}"
+docker run --rm --entrypoint sh "$image" -c 'test -x /bin/ps'
 
 docker run --detach \
   --name "$exporter_name" \
