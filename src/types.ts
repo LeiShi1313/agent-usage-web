@@ -77,6 +77,16 @@ export type CostPayload = {
   error?: ProviderError | null;
 };
 
+export type UpstreamIssue = {
+  source: string;
+  code: string;
+  message: string;
+  provider?: string | null;
+  operation: 'collection' | 'config' | 'cost' | 'poll' | 'refresh' | 'usage';
+  occurredAt?: string | null;
+  details?: string;
+};
+
 export type DashboardPayload = {
   mode: 'live';
   generatedAt: string;
@@ -96,5 +106,6 @@ export type DashboardPayload = {
   };
   usage: ProviderPayload[];
   cost: CostPayload[];
+  upstreamIssues: UpstreamIssue[];
   upstreamErrors: string[];
 };
