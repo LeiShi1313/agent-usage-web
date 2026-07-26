@@ -52,20 +52,17 @@ The exporter uses CodexBar's native config for provider-specific settings:
 ~/.codexbar/config.json -> /home/node/.codexbar/config.json:ro
 ```
 
-Collection is intentionally scoped to Codex and Antigravity. The default compose stack mounts local agent state into the exporter only:
+The default compose stack mounts only the state the enabled providers need into the exporter:
 
 ```text
 ~/.codex                  -> /home/node/.codex:rw
 ~/.codexbar               -> /home/node/.codexbar:ro
 ~/.codexbar/antigravity   -> /home/node/.codexbar/antigravity:rw
-~/.claude                 -> /home/node/.claude:ro
-~/.claude/.credentials.json -> /home/node/.claude/.credentials.json:rw
-~/.cursor                 -> /home/node/.cursor:ro
-~/.grok                   -> /home/node/.grok:rw
 ~/.gemini                 -> /home/node/.gemini:ro  # Antigravity state uses this upstream path
-~/.config                 -> /home/node/.config:ro
-~/.local/share            -> /home/node/.local/share:ro
+~/.grok                   -> /home/node/.grok:rw
 ```
+
+When you enable another provider in `~/.codexbar/config.json`, add its state directory as a mount in `docker-compose.yml` (for example `~/.claude` for Claude) rather than mounting whole config trees.
 
 Enable providers in `~/.codexbar/config.json` (for example `"id": "grok", "enabled": true`). Grok needs a SuperGrok login (`grok login`) so `~/.grok/auth.json` exists; the exporter puts `~/.grok/bin` on `PATH` for the Grok CLI billing path and sets `CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT=1` so CodexBar can fall back to grok.com via Chrome cookies when needed.
 
@@ -80,9 +77,13 @@ EXPORTER_TOKEN=replace-me
 WEB_ACCOUNT_DISPLAY=hidden
 WEB_PROVIDER_ORDER=codex,antigravity,grok
 WEB_EXPORTER_POLL_SECONDS=60
+WEB_POLL_RETENTION_DAYS=30
+WEB_REFRESH_MIN_INTERVAL_SECONDS=30
 EXPORTER_REFRESH_SECONDS=300
 EXPORTER_CODEX_USAGE_SOURCE=oauth
 ```
+
+Exporter traffic carries the bearer token and usage data in plain HTTP. Keep exporters on localhost, a private network, or an encrypted overlay (Tailscale, WireGuard); put a TLS reverse proxy in front of any exporter exposed beyond that.
 
 `WEB_PROVIDER_ORDER` controls the physical display order of provider rows/tabs in the web UI. Providers listed first appear first; unlisted providers fall back to alphabetical order after the listed providers.
 
@@ -114,16 +115,19 @@ GET  /api/dashboard
 POST /api/refresh
 ```
 
-The web service stores every exporter poll attempt in SQLite, including both successful snapshots and failure records. `/api/dashboard` includes structured, sanitized `upstreamIssues` for the expandable error disclosure and retains `upstreamErrors` as legacy summary strings. There is no fake or demo data path.
+The web service stores every exporter poll attempt in SQLite, including both successful snapshots and failure records; rows older than `WEB_POLL_RETENTION_DAYS` (default 30 days, `0` keeps forever) are pruned while the latest successful poll per exporter is always retained. `/api/dashboard` includes structured, sanitized `upstreamIssues` for the expandable error disclosure and retains `upstreamErrors` as legacy summary strings. There is no fake or demo data path.
+
+`POST /api/refresh` requires the request header `x-agent-usage-refresh: 1` (the dashboard sends it automatically); cross-origin pages cannot attach it without a CORS preflight, which blocks CSRF-style refresh triggering. Refreshes are also coalesced and rate-limited (`WEB_REFRESH_MIN_INTERVAL_SECONDS`, default 30).
 
 ## Development
+
+The server is split into an entry point (`server/index.js`) and role modules under `server/lib/`: `config.js` (env parsing), `sanitize.js` (redaction), `identity.js` (account derivation), `collect.js` (CodexBar collection), `snapshot-store.js` (exporter snapshot cache/refresh), `poll-store.js` (SQLite), `exporter-client.js`, `web-runtime.js` (poll cache + refresh fan-out), `dashboard.js` (aggregation), and `app.js` (Express apps for both roles). Pure logic is unit-tested directly; the tests in `test/exporter-issues.test.js` exercise both roles end to end.
 
 ```bash
 npm install
 npm test
+npm run lint
 npm run build
 node --check server/index.js
 docker compose up -d --build
 ```
-
-The current `npm run lint` script requires an ESLint 9 flat config that has not been added yet.
