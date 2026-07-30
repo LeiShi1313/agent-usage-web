@@ -69,10 +69,10 @@ A 44-agent design review confirmed 38 defects; all were addressed:
    exporters (local + `Macbook Pro M1 Max` in `.env`) has not been run since
    the refactor. Verify: dashboard renders, both exporters polled, refresh
    button works (needs the new header — old cached frontends will get 403).
-2. **Docker image not rebuilt/pushed.** README still lists tags up to 0.1.3;
-   package.json is 0.1.4. A release (`docker build`, smoke script, tag,
-   push) is pending — CI (`.github/workflows/ci.yml`) should exercise the
-   Dockerfile + smoke test on push to main.
+2. **Release candidate not yet published.** `package.json` and README target
+   v0.2.0 because the refactor changes a pre-1.0 external refresh contract.
+   Tagging `v0.2.0` after merge will run the release workflow, rebuild and
+   smoke-test the image, then publish it to Docker Hub.
 3. **Grok cookie fallback mount** is now opt-in (commented compose line for
    `~/.config/google-chrome`). If Grok billing via browser cookies is needed,
    uncomment it.
