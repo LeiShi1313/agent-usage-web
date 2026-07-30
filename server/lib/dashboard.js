@@ -161,6 +161,7 @@ export function createDashboardBuilder({ accountDisplay, staleAfterSeconds, expi
     const updatedAt = dataUpdatedAt(targetState);
     return {
       name: publicTargetName(target),
+      updatedAt,
       lastSuccessAt: targetState.lastSuccessAt,
       lastAttemptAt: targetState.lastAttemptAt,
       stale: ageMs(updatedAt) > staleMs,
@@ -290,7 +291,7 @@ export function createDashboardBuilder({ accountDisplay, staleAfterSeconds, expi
       }
     }
 
-    const lastUpdatedAt = maxISO(sourceStates.map((source) => source.lastSuccessAt));
+    const lastUpdatedAt = maxISO(sourceStates.map((source) => source.updatedAt));
     const failedSources = sourceStates.filter((source) => source.error).length;
     const staleSources = sourceStates.filter((source) => source.stale && source.lastSuccessAt).length;
     const expiredSources = sourceStates.filter((source) => source.expired && source.lastSuccessAt).length;

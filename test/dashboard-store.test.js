@@ -192,18 +192,38 @@ test('two unknown-identity usage rows in one snapshot both appear', () => {
 
 test('staleness follows data age, not poll success time', () => {
   const target = makeTarget(1);
+  const generatedAt = isoAgo(2 * HOUR_MS);
   const cache = cacheFor([{
     target,
-    snapshot: snapshotOf([usageRecord()], { generatedAt: isoAgo(2 * HOUR_MS) }),
+    snapshot: snapshotOf([usageRecord()], { generatedAt }),
     lastSuccessAt: isoAgo(0),
     lastAttemptAt: isoAgo(0)
   }]);
 
   const dashboard = makeBuilder({ staleAfterSeconds: 600 }).buildDashboard([target], cache);
   assert.equal(dashboard.usage[0].stale, true);
+  assert.equal(dashboard.freshness.lastUpdatedAt, generatedAt);
   assert.equal(dashboard.freshness.stale, true);
   assert.equal(dashboard.freshness.expired, false);
   assert.equal(dashboard.freshness.warning, 'Data is stale');
+});
+
+test('usage and cost for the same provider account share a public account key', () => {
+  const target = makeTarget(1);
+  const cache = cacheFor([{
+    target,
+    snapshot: snapshotOf([
+      usageRecord({ acct: account('stable-provider-id', 'display@example.com') }),
+      costRecord({ acct: account('stable-provider-id', 'display@example.com') })
+    ])
+  }]);
+
+  const dashboard = makeBuilder().buildDashboard([target], cache);
+  assert.equal(dashboard.usage.length, 1);
+  assert.equal(dashboard.cost.length, 1);
+  assert.equal(dashboard.usage[0].accountKey, dashboard.cost[0].accountKey);
+  assert.match(dashboard.usage[0].accountKey, /^codex:[A-Za-z0-9_-]{18}$/);
+  assert.doesNotMatch(dashboard.usage[0].accountKey, /stable-provider-id|display@example\.com/);
 });
 
 test('fresh data is not stale and produces no warning', () => {
