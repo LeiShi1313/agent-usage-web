@@ -32,15 +32,12 @@ export default function App() {
   }, [data, selectedKey]);
 
   return (
-    <main className="min-h-screen overflow-hidden bg-page px-4 py-6 text-ink sm:px-6 lg:px-8">
-      <div className="ambient ambient-a" />
-      <div className="ambient ambient-b" />
-
-      <section className="relative mx-auto flex w-full max-w-6xl flex-col gap-5">
+    <main className="min-h-screen overflow-hidden bg-page px-4 py-5 text-ink sm:px-6 sm:py-6 lg:px-8">
+      <section className="relative mx-auto flex w-full max-w-[82.5rem] flex-col gap-3">
         <header className="topbar">
           <div>
             <p className="eyebrow">Local AI agent limits</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-normal sm:text-4xl">Agent Usage</h1>
+            <h1 className="mt-1 text-4xl font-semibold tracking-tight sm:text-[2.5rem]">Agent Usage</h1>
             <p className="mt-2 text-sm text-ink/55">
               Last update {formatTime(data?.freshness?.lastUpdatedAt)}
               {data?.freshness?.warning ? <span className="ml-2 text-amber-700">{data.freshness.warning}</span> : null}
@@ -84,7 +81,7 @@ export default function App() {
                 cost={costFor(selected.provider, data?.cost ?? [], selected.accountKey)}
               />
             ) : (
-              <motion.div className="panel min-h-[480px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <motion.div className="panel empty-panel" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <Activity className="text-ink/40" />
                 <p className="mt-4 text-lg font-medium">{data ? 'No exporter data yet' : 'Loading usage data'}</p>
               </motion.div>

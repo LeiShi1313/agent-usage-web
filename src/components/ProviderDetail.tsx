@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
-import { AlertTriangle, BarChart3, CircleDollarSign, Clock3, KeyRound } from 'lucide-react';
+import { AlertTriangle, BarChart3, CircleDollarSign, Clock3, KeyRound, UserRound } from 'lucide-react';
 import { formatMoney, formatTime, formatTokens } from '../lib/format';
-import { providerHealth, providerKey, resolveProviderPresentation, windowLabel } from '../lib/providers';
+import { providerKey, providerLabel, windowLabel } from '../lib/providers';
 import type { CostPayload, ProviderPayload, RateWindow } from '../types';
 import { MetricBar } from './MetricBar';
 
@@ -33,10 +33,7 @@ function collectWindows(provider: ProviderPayload): WindowEntry[] {
 }
 
 export function ProviderDetail({ provider, cost }: { provider: ProviderPayload; cost?: CostPayload }) {
-  const meta = resolveProviderPresentation(provider.provider);
-  const Icon = meta.icon;
   const account = provider.account ?? provider.usage?.identity?.accountEmail ?? null;
-  const plan = provider.usage?.identity?.loginMethod ?? provider.source;
   const windows = collectWindows(provider);
   const lastUpdated = provider.usage?.updatedAt ?? provider.credits?.updatedAt;
 
@@ -47,34 +44,18 @@ export function ProviderDetail({ provider, cost }: { provider: ProviderPayload; 
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -10, scale: 0.99 }}
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className="panel"
+      className="panel provider-panel"
     >
-      <div className="flex items-start justify-between gap-4 border-b border-ink/10 pb-5">
-        <div>
-          <div className="flex items-center gap-3">
-            <span className="provider-mark" style={{ backgroundColor: meta.tint }}>
-              <Icon size={18} />
-            </span>
-            <h2 className="text-2xl font-semibold tracking-normal text-ink">{meta.label}</h2>
-          </div>
-          <p className="mt-2 text-[15px] text-ink/60">{providerHealth(provider)}</p>
-        </div>
-        {account || plan ? (
-          <div className="min-w-0 text-right">
-            {account ? <p className="truncate text-[15px] font-medium text-ink">{account}</p> : null}
-            {plan ? <p className={account ? 'mt-1 text-sm uppercase tracking-[0.12em] text-ink/45' : 'text-sm uppercase tracking-[0.12em] text-ink/45'}>{plan}</p> : null}
-          </div>
-        ) : null}
-      </div>
+      <h2 className="sr-only">{providerLabel(provider.provider)} usage</h2>
 
       {provider.error ? (
-        <div className="notice">
+        <div className="notice provider-notice">
           <AlertTriangle size={18} />
           <span>{provider.error.message ?? provider.error.description ?? 'Provider returned an error.'}</span>
         </div>
       ) : null}
 
-      <div className="mt-7 space-y-7">
+      <div className="metric-list">
         {windows.length ? (
           windows.map((entry) => <MetricBar key={entry.key} label={entry.label} window={entry.window} />)
         ) : (
@@ -82,7 +63,7 @@ export function ProviderDetail({ provider, cost }: { provider: ProviderPayload; 
         )}
       </div>
 
-      <div className="mt-8 grid gap-4 border-t border-ink/10 pt-6 sm:grid-cols-2">
+      <div className="provider-financials">
         <div className="quiet-tile">
           <div className="tile-label">
             <CircleDollarSign size={16} />
@@ -101,7 +82,13 @@ export function ProviderDetail({ provider, cost }: { provider: ProviderPayload; 
         </div>
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-sm text-ink/52">
+      <div className="provider-footer">
+        {account ? (
+          <span className="provider-footer-account">
+            <UserRound size={15} />
+            <span>{account}</span>
+          </span>
+        ) : null}
         <span className="inline-flex items-center gap-2">
           <Clock3 size={15} />
           Last update {formatTime(lastUpdated)}
