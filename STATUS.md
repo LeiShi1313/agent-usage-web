@@ -1,4 +1,10 @@
-# Status — 2026-07-30 v0.2.0 deployed
+# Status — 2026-07-30 v0.2.1 deployed
+
+The dashboard visual refresh is merged and deployed. Pull request
+[#5](https://github.com/LeiShi1313/agent-usage-web/pull/5) merged as `2fccf38`
+and is tagged `v0.2.1`. It keeps the existing provider-detail layout while
+using the approved bolder theme, full-width limit bars, and a single visible
+provider identity.
 
 The exporter/web redesign refactor is merged and deployed. The main refactor is
 commit `fba45d6` (`refactor!: modularize server and web, fix aggregation and
@@ -56,6 +62,21 @@ A 44-agent design review confirmed 38 defects; all were addressed:
 
 ## Verified working
 
+- The `v0.2.1` pull request and post-merge CI runs passed tests, production
+  dependency audit, TypeScript/Vite build, container build, and exporter/web
+  smoke tests.
+- The release workflow published and attested the `linux/amd64` and
+  `linux/arm64` image at OCI index digest
+  `sha256:a831cb4b8cdb7cfa643e1e6c1c42e736e53da526e8a280558f4d619a79ba81aa`.
+- The central web service was rolled from `0.2.0` to `0.2.1` with its existing
+  SQLite volume preserved. Local and public health checks returned 200 with
+  both configured exporters successful.
+- Public desktop and 320px browser checks covered both provider tabs and the
+  selected Codex view. The deployed page served the release's hashed CSS/JS,
+  had no browser errors, and manual refresh completed with HTTP 200.
+- This release changes only the web UI, so the healthy local and macOS
+  exporters remain on `0.2.0`. The central web rollback image is `0.2.0`; no
+  database migration was required.
 - `npm test`: 79/79 pass (3 pre-existing integration + dashboard contract and unit tests in
   `test/auth.test.js`, `test/sanitize.test.js`, `test/identity-collect.test.js`,
   `test/dashboard-contract.test.js`, `test/dashboard-store.test.js`).
