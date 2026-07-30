@@ -1,8 +1,9 @@
-# Status — 2026-07-26 refactor session
+# Status — 2026-07-30 refactor continuation
 
 Snapshot of where the exporter/web redesign refactor stands, so the next
-session can resume without re-deriving context. Refers to commit `fba45d6`
-(`refactor!: modularize server and web, fix aggregation and redaction`).
+session can resume without re-deriving context. The main refactor is commit
+`fba45d6` (`refactor!: modularize server and web, fix aggregation and
+redaction`); the dashboard follow-up is `ede766a` plus `f026abb`.
 
 ## What was done
 
@@ -40,15 +41,27 @@ A 44-agent design review confirmed 38 defects; all were addressed:
   (`~/.codex`, `~/.codexbar`, `~/.gemini`, `~/.grok` — no more `~/.config`,
   `~/.local/share`, `~/.claude`, `~/.cursor`); compose healthchecks added;
   `eslint.config.js` added (flat config, server+test only, src/ ignored).
+- The interrupted dashboard adversarial sweep is complete:
+  - `freshness.lastUpdatedAt` now uses the data timestamp, consistent with
+    stale/expired status, instead of claiming a recent poll refreshed old data.
+  - A full payload contract test covers every dashboard field consumed by
+    `src/types.ts`, including tertiary/extra windows and nullable fields.
+  - Usage and Cost for the same Provider Account are directly verified to emit
+    the same privacy-safe public `accountKey`; unknown identities remain scoped
+    by both Scrape Target and row.
+  - `server/lib/dashboard.js` now exposes only its deep module interface,
+    `createDashboardBuilder`; implementation helpers are private and tested
+    through observable dashboard output.
 
 ## Verified working
 
-- `npm test`: 78/78 pass (3 pre-existing integration + 75 new unit tests in
+- `npm test`: 79/79 pass (3 pre-existing integration + dashboard contract and unit tests in
   `test/auth.test.js`, `test/sanitize.test.js`, `test/identity-collect.test.js`,
-  `test/dashboard-store.test.js`).
+  `test/dashboard-contract.test.js`, `test/dashboard-store.test.js`).
 - `npm run lint`: clean. `npx tsc -p tsconfig.app.json --noEmit`: clean.
 - `npm run build`: clean (vite + tsc).
 - `node --check server/index.js`: clean.
+- `docker compose config --quiet` and `bash -n scripts/smoke-image.sh`: clean.
 
 ## Not yet verified / next steps
 
@@ -56,20 +69,14 @@ A 44-agent design review confirmed 38 defects; all were addressed:
    exporters (local + `Macbook Pro M1 Max` in `.env`) has not been run since
    the refactor. Verify: dashboard renders, both exporters polled, refresh
    button works (needs the new header — old cached frontends will get 403).
-2. **Final adversarial regression sweep was cut short** (user wrap-up). Areas
-   it was checking when stopped: dashboard JSON shape field-by-field vs
-   `src/types.ts`, accountKey stability between usage and cost rows (must
-   hash identically for `costFor` matching — unit-tested indirectly, not
-   end-to-end), compose healthcheck syntax on node:24, smoke-image.sh vs the
-   new `CMD` (script uses `--entrypoint codexbar` which still works with CMD).
-3. **Docker image not rebuilt/pushed.** README still lists tags up to 0.1.3;
+2. **Docker image not rebuilt/pushed.** README still lists tags up to 0.1.3;
    package.json is 0.1.4. A release (`docker build`, smoke script, tag,
    push) is pending — CI (`.github/workflows/ci.yml`) should exercise the
    Dockerfile + smoke test on push to main.
-4. **Grok cookie fallback mount** is now opt-in (commented compose line for
+3. **Grok cookie fallback mount** is now opt-in (commented compose line for
    `~/.config/google-chrome`). If Grok billing via browser cookies is needed,
    uncomment it.
-5. Deployed remote exporters must be upgraded together with the web role
+4. Deployed remote exporters must be upgraded together with the web role
    eventually (snapshot schema unchanged, so mixed versions do work), and any
    external caller of `POST /api/refresh` must send the new header.
 
