@@ -1,9 +1,10 @@
-# Status — 2026-07-30 refactor continuation
+# Status — 2026-07-30 v0.2.0 deployed
 
-Snapshot of where the exporter/web redesign refactor stands, so the next
-session can resume without re-deriving context. The main refactor is commit
-`fba45d6` (`refactor!: modularize server and web, fix aggregation and
-redaction`); the dashboard follow-up is `ede766a` plus `f026abb`.
+The exporter/web redesign refactor is merged and deployed. The main refactor is
+commit `fba45d6` (`refactor!: modularize server and web, fix aggregation and
+redaction`); the dashboard follow-up is `ede766a` plus `f026abb`. Pull request
+[#2](https://github.com/LeiShi1313/agent-usage-web/pull/2) merged as `d3ab3f9`,
+which is tagged `v0.2.0`.
 
 ## What was done
 
@@ -62,23 +63,33 @@ A 44-agent design review confirmed 38 defects; all were addressed:
 - `npm run build`: clean (vite + tsc).
 - `node --check server/index.js`: clean.
 - `docker compose config --quiet` and `bash -n scripts/smoke-image.sh`: clean.
+- `npm audit --omit=dev --audit-level=high`: no high or critical production
+  vulnerabilities (one low-severity transitive advisory remains).
+- GitHub CI passed on both pull request #2 and the resulting `main` merge.
+- The `v0.2.0` release workflow rebuilt, smoke-tested, attested, and published
+  the multi-architecture (`linux/amd64`, `linux/arm64`) image. Docker tags
+  `0.2.0`, `0.2`, and `latest` resolve to OCI index digest
+  `sha256:f292cfddac873cbc76e6b8264a7965baaa83596cc4e03263ff9cee10f77329e1`.
+- A live Compose rollout using `leishi1313/agent-usage-web:0.2.0` completed with
+  both services healthy and existing named volumes preserved. Desktop and
+  mobile browser smoke tests covered both provider tabs and a manual refresh;
+  `POST /api/refresh` returned 200 and the dashboard retained cached data while
+  an unavailable remote exporter was reported as a warning.
+- Rollback image: `leishi1313/agent-usage-web:0.1.4`. No database migration was
+  required.
 
-## Not yet verified / next steps
+## Remaining operational follow-ups
 
-1. **No live smoke run.** `docker compose up -d --build` against the real
-   exporters (local + `Macbook Pro M1 Max` in `.env`) has not been run since
-   the refactor. Verify: dashboard renders, both exporters polled, refresh
-   button works (needs the new header — old cached frontends will get 403).
-2. **Release candidate not yet published.** `package.json` and README target
-   v0.2.0 because the refactor changes a pre-1.0 external refresh contract.
-   Tagging `v0.2.0` after merge will run the release workflow, rebuild and
-   smoke-test the image, then publish it to Docker Hub.
-3. **Grok cookie fallback mount** is now opt-in (commented compose line for
+1. One configured remote exporter remains unavailable/intermittent. The web
+   role handles this as designed by surfacing a warning and retaining previous
+   good records, but the remote service should be checked and upgraded to
+   v0.2.0. Mixed snapshot schema versions remain compatible.
+2. Any external caller of `POST /api/refresh` must send
+   `x-agent-usage-refresh: 1`; old cached frontends will receive 403 until they
+   reload the deployed bundle.
+3. **Grok cookie fallback mount** is opt-in (commented compose line for
    `~/.config/google-chrome`). If Grok billing via browser cookies is needed,
    uncomment it.
-4. Deployed remote exporters must be upgraded together with the web role
-   eventually (snapshot schema unchanged, so mixed versions do work), and any
-   external caller of `POST /api/refresh` must send the new header.
 
 ## Known intentional quirks
 
