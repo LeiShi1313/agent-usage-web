@@ -20,6 +20,7 @@ export function ProviderTab({
   const isWaiting = !hasIncident && !provider.usage && !provider.credits;
   const status = provider.error ? 'Issue' : provider.stale ? 'Stale' : hasIncident ? 'Incident' : isWaiting ? 'Waiting' : 'Active';
   const statusClass = hasIncident ? 'provider-tab-status-warning' : isWaiting ? 'provider-tab-status-waiting' : '';
+  const plan = provider.usage?.identity?.loginMethod ?? null;
 
   return (
     <button
@@ -36,6 +37,7 @@ export function ProviderTab({
         <span className={`provider-tab-status ${statusClass}`}>
           <span aria-hidden="true" className="provider-status-dot" />
           {status}
+          {plan ? <span className="provider-tab-plan">{plan}</span> : null}
         </span>
       </span>
     </button>
