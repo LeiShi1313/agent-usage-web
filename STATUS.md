@@ -74,16 +74,21 @@ A 44-agent design review confirmed 38 defects; all were addressed:
   both services healthy and existing named volumes preserved. Desktop and
   mobile browser smoke tests covered both provider tabs and a manual refresh;
   `POST /api/refresh` returned 200 and the dashboard retained cached data while
-  an unavailable remote exporter was reported as a warning.
+  a remote exporter was temporarily unavailable.
+- The configured macOS exporter was upgraded from v0.1.3 to the arm64 v0.2.0
+  image with its cache volume preserved. Its authenticated snapshot returned
+  200, and a central dashboard refresh reported both configured exporters
+  successful with no unavailable-source warning. The v0.1.3 image remains on
+  the Mac as its rollback artifact.
 - Rollback image: `leishi1313/agent-usage-web:0.1.4`. No database migration was
   required.
 
 ## Remaining operational follow-ups
 
-1. One configured remote exporter remains unavailable/intermittent. The web
-   role handles this as designed by surfacing a warning and retaining previous
-   good records, but the remote service should be checked and upgraded to
-   v0.2.0. Mixed snapshot schema versions remain compatible.
+1. The Mac's OrbStack daemon was stopped before the upgrade and had to be
+   started manually. The exporter has `restart: unless-stopped`, but OrbStack
+   itself must be configured to start at login if the exporter must survive a
+   Mac restart unattended.
 2. Any external caller of `POST /api/refresh` must send
    `x-agent-usage-refresh: 1`; old cached frontends will receive 403 until they
    reload the deployed bundle.
