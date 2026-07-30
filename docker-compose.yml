@@ -15,6 +15,11 @@ services:
       - /tmp:rw,nosuid,nodev,size=64m
     ports:
       - "${AGENT_USAGE_EXPORTER_HOST:-127.0.0.1}:${AGENT_USAGE_EXPORTER_PORT:-39174}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/v1/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     environment:
       APP_ROLE: "exporter"
       PORT: "3000"
@@ -34,19 +39,20 @@ services:
       XDG_CONFIG_HOME: "/home/node/.config"
       XDG_CACHE_HOME: "/home/node/.cache"
       XDG_DATA_HOME: "/home/node/.local/share"
+    # Mount only the state the enabled providers need. Add mounts when you
+    # enable more providers in ~/.codexbar/config.json (e.g. ~/.claude for
+    # Claude) instead of exposing whole config trees to the collector.
     volumes:
       # Codex OAuth rotates refresh tokens during collection; this mount must be writable.
       - "${HOME}/.codex:/home/node/.codex:rw"
       - "${HOME}/.codexbar:/home/node/.codexbar:ro"
       - "${HOME}/.codexbar/antigravity:/home/node/.codexbar/antigravity:rw"
-      - "${HOME}/.claude:/home/node/.claude:ro"
-      - "${HOME}/.claude/.credentials.json:/home/node/.claude/.credentials.json:rw"
-      - "${HOME}/.cursor:/home/node/.cursor:ro"
+      # Antigravity state uses the upstream ~/.gemini path.
       - "${HOME}/.gemini:/home/node/.gemini:ro"
       # Grok SuperGrok OAuth + local sessions; grok CLI may refresh auth.json.
       - "${HOME}/.grok:/home/node/.grok:rw"
-      - "${HOME}/.config:/home/node/.config:ro"
-      - "${HOME}/.local/share:/home/node/.local/share:ro"
+      # Uncomment for the Grok web-cookie fallback (CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT):
+      # - "${HOME}/.config/google-chrome:/home/node/.config/google-chrome:ro"
       - agent-usage-exporter-cache:/home/node/.cache/agent-usage-web:rw
 
   agent-usage-web:
@@ -67,6 +73,11 @@ services:
       - agent-usage-exporter
     ports:
       - "${AGENT_USAGE_WEB_HOST:-127.0.0.1}:${AGENT_USAGE_WEB_PORT:-39173}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     environment:
       APP_ROLE: "web"
       PORT: "3000"
@@ -75,6 +86,7 @@ services:
       WEB_EXPORTER_POLL_SECONDS: "${WEB_EXPORTER_POLL_SECONDS:-60}"
       WEB_STALE_AFTER_SECONDS: "${WEB_STALE_AFTER_SECONDS:-600}"
       WEB_EXPIRED_AFTER_SECONDS: "${WEB_EXPIRED_AFTER_SECONDS:-86400}"
+      WEB_POLL_RETENTION_DAYS: "${WEB_POLL_RETENTION_DAYS:-30}"
       WEB_SQLITE_PATH: "/home/node/.local/share/agent-usage-web/polls.sqlite"
       WEB_EXPORTERS_JSON: "${WEB_EXPORTERS_JSON:-}"
       WEB_EXPORTER_URL: "http://agent-usage-exporter:3000"

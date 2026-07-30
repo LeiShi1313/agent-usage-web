@@ -108,4 +108,7 @@ export type DashboardPayload = {
   cost: CostPayload[];
   upstreamIssues: UpstreamIssue[];
   upstreamErrors: string[];
+  refresh?: {
+    status: string;
+  };
 };

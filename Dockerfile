@@ -1,14 +1,16 @@
 FROM node:24-trixie-slim AS web-build
 
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY . .
 RUN npm run build
 
 FROM node:24-trixie-slim AS runtime
 
 ARG CODEXBAR_VERSION=0.41.0
+ARG CODEX_CLI_VERSION=latest
+ARG CLAUDE_CODE_VERSION=latest
 
 ENV NODE_ENV=production \
     PORT=3000 \
@@ -19,7 +21,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl tar git libsqlite3-0 procps \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g @openai/codex@latest @anthropic-ai/claude-code@latest
+RUN npm install -g "@openai/codex@${CODEX_CLI_VERSION}" "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
+    && npm cache clean --force
 
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
@@ -42,17 +45,15 @@ RUN set -eux; \
     rm -f "/tmp/${asset}"
 
 WORKDIR /app
-COPY package*.json ./
-RUN npm install --omit=dev && npm cache clean --force
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=web-build /app/dist ./dist
 COPY server ./server
-COPY docker/entrypoint.sh /entrypoint.sh
 
 RUN mkdir -p /home/node/.cache/agent-usage-web /home/node/.local/share/agent-usage-web \
-    && chmod 0755 /entrypoint.sh \
     && chown -R node:node /app /home/node
 
 USER node
 EXPOSE 3000
 
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["node", "server/index.js"]
