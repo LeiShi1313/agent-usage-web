@@ -1,4 +1,3 @@
-import { clampPercent, usageColor } from '../lib/format';
 import { resolveProviderPresentation } from '../lib/providers';
 import type { ProviderPayload } from '../types';
 
@@ -13,15 +12,31 @@ export function ProviderTab({
 }) {
   const meta = resolveProviderPresentation(provider.provider);
   const Icon = meta.icon;
-  const tabUsed = clampPercent(provider.usage?.primary?.usedPercent ?? provider.usage?.secondary?.usedPercent ?? 0);
-  const remain = 100 - tabUsed;
+  const hasIncident = Boolean(
+    provider.error ||
+    provider.stale ||
+    (provider.status?.indicator && provider.status.indicator !== 'none')
+  );
+  const isWaiting = !hasIncident && !provider.usage && !provider.credits;
+  const status = provider.error ? 'Issue' : provider.stale ? 'Stale' : hasIncident ? 'Incident' : isWaiting ? 'Waiting' : 'Active';
+  const statusClass = hasIncident ? 'provider-tab-status-warning' : isWaiting ? 'provider-tab-status-waiting' : '';
 
   return (
-    <button className={`provider-tab ${active ? 'provider-tab-active' : ''}`} onClick={onClick} type="button">
-      <Icon size={20} strokeWidth={2.1} />
-      <span>{meta.label}</span>
-      <span className="tab-meter">
-        <span style={{ width: `${remain}%`, backgroundColor: usageColor(tabUsed) }} />
+    <button
+      aria-pressed={active}
+      className={`provider-tab ${active ? 'provider-tab-active' : ''}`}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="provider-tab-mark" style={{ backgroundColor: meta.tint }}>
+        <Icon aria-hidden="true" size={20} strokeWidth={2} />
+      </span>
+      <span className="provider-tab-copy">
+        <span className="provider-tab-name">{meta.label}</span>
+        <span className={`provider-tab-status ${statusClass}`}>
+          <span aria-hidden="true" className="provider-status-dot" />
+          {status}
+        </span>
       </span>
     </button>
   );

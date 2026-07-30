@@ -1,3 +1,4 @@
+import { CircleDollarSign, Database, Table2, UserRound } from 'lucide-react';
 import { formatMoney } from '../lib/format';
 import type { DashboardPayload } from '../types';
 
@@ -8,24 +9,24 @@ export function SummaryStrip({ data }: { data: DashboardPayload }) {
   const sourceCount = data.freshness?.sourceCount ?? 0;
   const successfulSources = data.freshness?.successfulSourceCount ?? 0;
 
+  const items = [
+    { label: 'Sources', value: `${successfulSources}/${sourceCount}`, icon: Database },
+    { label: 'Accounts', value: `${successful}/${data.usage.length}`, icon: UserRound },
+    { label: 'Windows', value: String(withLimits), icon: Table2 },
+    { label: 'Cost 30d', value: formatMoney(totalCost), icon: CircleDollarSign }
+  ];
+
   return (
     <div className="summary-grid">
-      <div>
-        <p className="summary-label">Sources</p>
-        <p className="summary-value">{successfulSources}/{sourceCount}</p>
-      </div>
-      <div>
-        <p className="summary-label">Accounts</p>
-        <p className="summary-value">{successful}/{data.usage.length}</p>
-      </div>
-      <div>
-        <p className="summary-label">Windows</p>
-        <p className="summary-value">{withLimits}</p>
-      </div>
-      <div>
-        <p className="summary-label">Cost 30d</p>
-        <p className="summary-value">{formatMoney(totalCost)}</p>
-      </div>
+      {items.map(({ label, value, icon: Icon }) => (
+        <div className="summary-item" key={label}>
+          <Icon aria-hidden="true" className="summary-icon" size={24} strokeWidth={1.9} />
+          <div>
+            <p className="summary-label">{label}</p>
+            <p className="summary-value">{value}</p>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -36,9 +36,16 @@ export function ProviderDetail({ provider, cost }: { provider: ProviderPayload; 
   const meta = resolveProviderPresentation(provider.provider);
   const Icon = meta.icon;
   const account = provider.account ?? provider.usage?.identity?.accountEmail ?? null;
-  const plan = provider.usage?.identity?.loginMethod ?? provider.source;
+  const plan = provider.usage?.identity?.loginMethod ?? null;
   const windows = collectWindows(provider);
   const lastUpdated = provider.usage?.updatedAt ?? provider.credits?.updatedAt;
+  const hasIncident = Boolean(
+    provider.error ||
+    provider.stale ||
+    (provider.status?.indicator && provider.status.indicator !== 'none')
+  );
+  const isWaiting = !hasIncident && !provider.usage && !provider.credits;
+  const statusDotClass = hasIncident ? 'provider-status-dot-warning' : isWaiting ? 'provider-status-dot-muted' : '';
 
   return (
     <motion.div
@@ -47,34 +54,37 @@ export function ProviderDetail({ provider, cost }: { provider: ProviderPayload; 
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -10, scale: 0.99 }}
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className="panel"
+      className="panel provider-panel"
     >
-      <div className="flex items-start justify-between gap-4 border-b border-ink/10 pb-5">
-        <div>
-          <div className="flex items-center gap-3">
-            <span className="provider-mark" style={{ backgroundColor: meta.tint }}>
-              <Icon size={18} />
-            </span>
-            <h2 className="text-2xl font-semibold tracking-normal text-ink">{meta.label}</h2>
+      <div className="provider-header">
+        <span className="provider-mark" style={{ backgroundColor: meta.tint }}>
+          <Icon aria-hidden="true" size={24} strokeWidth={2} />
+        </span>
+        <div className="provider-heading-copy">
+          <div className="provider-title-row">
+            <h2>{meta.label}</h2>
+            {plan ? <span className="provider-plan">{plan}</span> : null}
           </div>
-          <p className="mt-2 text-[15px] text-ink/60">{providerHealth(provider)}</p>
+          <div className="provider-meta">
+            <span
+              aria-hidden="true"
+              className={`provider-status-dot ${statusDotClass}`}
+            />
+            {account ? <span className="provider-account">{account}</span> : null}
+            {account ? <span aria-hidden="true">·</span> : null}
+            <span>{providerHealth(provider)}</span>
+          </div>
         </div>
-        {account || plan ? (
-          <div className="min-w-0 text-right">
-            {account ? <p className="truncate text-[15px] font-medium text-ink">{account}</p> : null}
-            {plan ? <p className={account ? 'mt-1 text-sm uppercase tracking-[0.12em] text-ink/45' : 'text-sm uppercase tracking-[0.12em] text-ink/45'}>{plan}</p> : null}
-          </div>
-        ) : null}
       </div>
 
       {provider.error ? (
-        <div className="notice">
+        <div className="notice provider-notice">
           <AlertTriangle size={18} />
           <span>{provider.error.message ?? provider.error.description ?? 'Provider returned an error.'}</span>
         </div>
       ) : null}
 
-      <div className="mt-7 space-y-7">
+      <div className="metric-list">
         {windows.length ? (
           windows.map((entry) => <MetricBar key={entry.key} label={entry.label} window={entry.window} />)
         ) : (
@@ -82,7 +92,7 @@ export function ProviderDetail({ provider, cost }: { provider: ProviderPayload; 
         )}
       </div>
 
-      <div className="mt-8 grid gap-4 border-t border-ink/10 pt-6 sm:grid-cols-2">
+      <div className="provider-financials">
         <div className="quiet-tile">
           <div className="tile-label">
             <CircleDollarSign size={16} />
@@ -101,7 +111,7 @@ export function ProviderDetail({ provider, cost }: { provider: ProviderPayload; 
         </div>
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-sm text-ink/52">
+      <div className="provider-footer">
         <span className="inline-flex items-center gap-2">
           <Clock3 size={15} />
           Last update {formatTime(lastUpdated)}
