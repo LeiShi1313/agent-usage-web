@@ -5,13 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { loadConfig, loadWebTargets } from '../server/lib/config.js';
-import {
-  accountAggregationKey,
-  createDashboardBuilder,
-  dataUpdatedAt,
-  numeric,
-  publicTargetName
-} from '../server/lib/dashboard.js';
+import { createDashboardBuilder } from '../server/lib/dashboard.js';
 import { createPollStore, openPollDatabase } from '../server/lib/poll-store.js';
 import { createSnapshotStore, migrateCachedSnapshot } from '../server/lib/snapshot-store.js';
 
@@ -93,38 +87,49 @@ function makeBuilder(overrides = {}) {
   });
 }
 
-test('numeric accepts finite numbers and zeroes everything else', () => {
-  assert.equal(numeric(5), 5);
-  assert.equal(numeric(0), 0);
-  assert.equal(numeric(Number.NaN), 0);
-  assert.equal(numeric('5'), 0);
-  assert.equal(numeric(undefined), 0);
-});
-
-test('publicTargetName prefers name, falls back to origin, then a constant', () => {
-  assert.equal(publicTargetName({ name: 'My Box', url: 'http://x:1' }), 'My Box');
-  assert.equal(publicTargetName({ url: 'http://x:1/path' }), 'http://x:1');
-  assert.equal(publicTargetName({ url: 'not a url' }), 'Exporter');
-});
-
-test('dataUpdatedAt takes the older of snapshot generation and poll success time', () => {
-  const older = '2026-07-26T00:00:00.000Z';
-  const newer = '2026-07-26T01:00:00.000Z';
-  // Old snapshot served by a healthy exporter: data age wins over poll age.
-  assert.equal(dataUpdatedAt({ snapshot: { generatedAt: older }, lastSuccessAt: newer }), older);
-  // Exporter clock skewed into the future: the poll time bounds the claim.
-  assert.equal(dataUpdatedAt({ snapshot: { generatedAt: newer }, lastSuccessAt: older }), older);
-  assert.equal(dataUpdatedAt({ snapshot: null, lastSuccessAt: newer }), newer);
-  assert.equal(dataUpdatedAt({ snapshot: null, lastSuccessAt: null }), null);
-});
-
-test('accountAggregationKey scopes unknown identities to target and row', () => {
+test('dashboard normalizes invalid cost metrics to zero', () => {
   const target = makeTarget(1);
-  const known = { provider: 'codex', kind: 'usage', account: { key: 'acct_1' } };
-  const unknown = { provider: 'codex', kind: 'usage', account: { key: 'unknown:local' } };
-  assert.equal(accountAggregationKey(known, target, 0), accountAggregationKey(known, target, 1));
-  assert.notEqual(accountAggregationKey(unknown, target, 0), accountAggregationKey(unknown, target, 1));
-  assert.notEqual(accountAggregationKey(unknown, target, 0), accountAggregationKey(unknown, makeTarget(2), 0));
+  const record = costRecord();
+  record.data = {
+    sessionTokens: 5,
+    sessionCostUSD: Number.NaN,
+    last30DaysTokens: '100',
+    last30DaysCostUSD: Number.POSITIVE_INFINITY
+  };
+  const dashboard = makeBuilder().buildDashboard(
+    [target],
+    cacheFor([{ target, snapshot: snapshotOf([record]) }])
+  );
+
+  assert.deepEqual(
+    {
+      sessionTokens: dashboard.cost[0].sessionTokens,
+      sessionCostUSD: dashboard.cost[0].sessionCostUSD,
+      last30DaysTokens: dashboard.cost[0].last30DaysTokens,
+      last30DaysCostUSD: dashboard.cost[0].last30DaysCostUSD
+    },
+    { sessionTokens: 5, sessionCostUSD: 0, last30DaysTokens: 0, last30DaysCostUSD: 0 }
+  );
+});
+
+test('dashboard issue sources prefer target names, then URL origins, then a fallback', () => {
+  const targets = [
+    { url: 'http://named:1', name: 'My Box' },
+    { url: 'http://unnamed:2/path' },
+    { url: 'not a url' }
+  ];
+  const cache = cacheFor(targets.map((target) => ({
+    target,
+    snapshot: null,
+    lastSuccessAt: null,
+    lastError: { message: `Failed ${target.url}` }
+  })));
+
+  const dashboard = makeBuilder().buildDashboard(targets, cache);
+  assert.deepEqual(
+    dashboard.upstreamIssues.map((issue) => issue.source),
+    ['My Box', 'http://unnamed:2', 'Exporter']
+  );
 });
 
 test('cost aggregation stage 1 replaces within a target: freshest record wins, never summed', () => {
@@ -171,22 +176,29 @@ test('usage dedup keeps the freshest record for the same account across targets'
   assert.equal(dashboard.usage[0].usage.primary.usedPercent, 55);
 });
 
-test('two unknown-identity usage rows in one snapshot both appear', () => {
-  const target = makeTarget(1);
+test('unknown-identity usage rows remain distinct by target and row', () => {
+  const targetA = makeTarget(1);
+  const targetB = makeTarget(2);
   const unknownAccount = { key: 'unknown:local', label: null, email: null, organization: null, identitySource: 'unknown' };
-  const cache = cacheFor([{
-    target,
-    snapshot: snapshotOf([
-      usageRecord({ usedPercent: 10, acct: unknownAccount }),
-      usageRecord({ usedPercent: 30, acct: unknownAccount })
-    ])
-  }]);
+  const cache = cacheFor([
+    {
+      target: targetA,
+      snapshot: snapshotOf([
+        usageRecord({ usedPercent: 10, acct: unknownAccount }),
+        usageRecord({ usedPercent: 30, acct: unknownAccount })
+      ])
+    },
+    {
+      target: targetB,
+      snapshot: snapshotOf([usageRecord({ usedPercent: 20, acct: unknownAccount })])
+    }
+  ]);
 
-  const dashboard = makeBuilder().buildDashboard([target], cache);
-  assert.equal(dashboard.usage.length, 2);
+  const dashboard = makeBuilder().buildDashboard([targetA, targetB], cache);
+  assert.equal(dashboard.usage.length, 3);
   assert.deepEqual(
     dashboard.usage.map((row) => row.usage.primary.usedPercent).sort((a, b) => a - b),
-    [10, 30]
+    [10, 20, 30]
   );
 });
 
@@ -206,6 +218,22 @@ test('staleness follows data age, not poll success time', () => {
   assert.equal(dashboard.freshness.stale, true);
   assert.equal(dashboard.freshness.expired, false);
   assert.equal(dashboard.freshness.warning, 'Data is stale');
+});
+
+test('freshness bounds future exporter clocks by the successful poll time', () => {
+  const target = makeTarget(1);
+  const lastSuccessAt = isoAgo(1_000);
+  const futureGeneratedAt = isoAgo(-HOUR_MS);
+  const cache = cacheFor([{
+    target,
+    snapshot: snapshotOf([usageRecord()], { generatedAt: futureGeneratedAt }),
+    lastSuccessAt,
+    lastAttemptAt: lastSuccessAt
+  }]);
+
+  const dashboard = makeBuilder().buildDashboard([target], cache);
+  assert.equal(dashboard.freshness.lastUpdatedAt, lastSuccessAt);
+  assert.equal(dashboard.freshness.stale, false);
 });
 
 test('usage and cost for the same provider account share a public account key', () => {

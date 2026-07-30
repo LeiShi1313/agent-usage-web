@@ -4,7 +4,7 @@ import { issueCode, issueOperation, issueProvider, publicUpstreamIssue, upstream
 import { publicError, publicText } from './sanitize.js';
 import { ageMs, maxISO, minISO, nowISO } from './util.js';
 
-export function numeric(value) {
+function numeric(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
@@ -12,7 +12,7 @@ export function numeric(value) {
  * Aggregation identity: provider + Account Key. Unknown identities are scoped
  * to the scrape target AND the row, so distinct unidentified rows never merge.
  */
-export function accountAggregationKey(record, target, rowIndex = 0) {
+function accountAggregationKey(record, target, rowIndex = 0) {
   const provider = record.provider ?? 'unknown';
   const accountKey = record.account?.key ?? 'unknown:local';
   const stableAccountKey = accountKey === 'unknown:local'
@@ -21,7 +21,7 @@ export function accountAggregationKey(record, target, rowIndex = 0) {
   return `${provider}\u0000${stableAccountKey}`;
 }
 
-export function publicTargetName(target) {
+function publicTargetName(target) {
   if (target.name) return publicText(target.name, 'Exporter').slice(0, 120);
   try {
     return new URL(target.url).origin;
@@ -36,7 +36,7 @@ export function publicTargetName(target) {
  * the snapshot's generation time and the poll success time (also guards
  * against exporter clock skew).
  */
-export function dataUpdatedAt(targetState) {
+function dataUpdatedAt(targetState) {
   return minISO([targetState.snapshot?.generatedAt, targetState.lastSuccessAt]) ??
     targetState.lastSuccessAt ?? null;
 }
