@@ -103,7 +103,8 @@ const codexCost = {
   source: 'local',
   account: 'codex-test',
   last30DaysTokens: 1200,
-  last30DaysCostUSD: 1.25
+  last30DaysCostUSD: 1.25,
+  historyCoverageIsEstablished: true
 };
 
 if (command === 'usage' && provider === 'codex') {
@@ -222,7 +223,12 @@ if (command === 'usage' && provider === 'grok') {
     usage: { primary: { usedPercent: 1 }, identity: { providerID: provider, accountEmail: provider + '@example.com' } }
   }]));
 } else if (command === 'cost') {
-  process.stdout.write(JSON.stringify([{ provider: 'codex', source: 'local', last30DaysCostUSD: 0.5 }]));
+  process.stdout.write(JSON.stringify([{
+    provider: 'codex',
+    source: 'local',
+    last30DaysCostUSD: 0.5,
+    historyCoverageIsEstablished: true
+  }]));
 } else {
   process.stdout.write('[]');
 }
