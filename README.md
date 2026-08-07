@@ -9,6 +9,7 @@ The Docker image is published at:
 
 ```text
 leishi1313/agent-usage-web:latest
+leishi1313/agent-usage-web:0.2.3
 leishi1313/agent-usage-web:0.2.2
 leishi1313/agent-usage-web:0.2.1
 leishi1313/agent-usage-web:0.2.0

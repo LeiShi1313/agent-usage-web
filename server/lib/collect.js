@@ -266,6 +266,9 @@ export function createCollector({ config, runCommand }) {
     if (rows.some((row) => row.historyCoverageIsEstablished === false)) {
       throw new Error(`${provider} cost history is still indexing.`);
     }
+    if (provider === 'codex' && rows.some((row) => row.historyCoverageIsEstablished !== true)) {
+      throw new Error(`${provider} cost history completion marker is missing.`);
+    }
     const cost = costRecordsFromRows(rows, nowISO(), usageAccountsByProvider);
     const issues = attachStderrDetails(cost.issues, result.commandError, { provider, operation: 'cost' });
     return { records: cost.records, issues };

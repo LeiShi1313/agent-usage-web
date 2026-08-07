@@ -369,3 +369,43 @@ test('createCollector advances incomplete cost scans while retaining the previou
   assert.match(costIssue.message, /history is still indexing/i);
   assert.equal(snapshot.collection.status, 'partial');
 });
+
+test('createCollector rejects Codex cost rows without an explicit history coverage marker', async () => {
+  const collector = createCollector({
+    config: collectorConfig(),
+    runCommand: async (_command, args) => {
+      if (args[0] === 'usage') {
+        return {
+          stdout: JSON.stringify([{
+            provider: 'codex',
+            accountKey: 'acct_1',
+            usage: { primary: { usedPercent: 25 } }
+          }]),
+          stderr: ''
+        };
+      }
+      return {
+        stdout: JSON.stringify([{
+          provider: 'codex',
+          accountKey: 'acct_1',
+          last30DaysCostUSD: 1
+        }]),
+        stderr: ''
+      };
+    }
+  });
+
+  const snapshot = await collector.collectSnapshot({
+    reason: 'test',
+    previous: previousSnapshotWithGoodCodexRecords()
+  });
+
+  const costRecord = snapshot.records.find((record) => record.kind === 'cost');
+  assert.equal(costRecord.collectedAt, '2026-07-19T00:00:00.000Z');
+  assert.equal(costRecord.data.last30DaysCostUSD, 5);
+
+  const costIssue = snapshot.errors.find((issue) => issue.operation === 'cost');
+  assert.equal(costIssue.code, 'cost-codex-failed');
+  assert.match(costIssue.message, /completion marker is missing/i);
+  assert.equal(snapshot.collection.status, 'partial');
+});
