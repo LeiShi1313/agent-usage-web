@@ -27,7 +27,12 @@ services:
       EXPORTER_REFRESH_SECONDS: "${EXPORTER_REFRESH_SECONDS:-300}"
       EXPORTER_REFRESH_MIN_INTERVAL_SECONDS: "${EXPORTER_REFRESH_MIN_INTERVAL_SECONDS:-60}"
       EXPORTER_CODEX_USAGE_SOURCE: "${EXPORTER_CODEX_USAGE_SOURCE:-oauth}"
-      EXPORTER_SNAPSHOT_CACHE_PATH: "/home/node/.cache/agent-usage-web/exporter-snapshot.json"
+      EXPORTER_USAGE_PROVIDERS: "${EXPORTER_USAGE_PROVIDERS:-}"
+      EXPORTER_COST_PROVIDER: "${EXPORTER_COST_PROVIDER:-codex}"
+      # The existing named volume stores exporter-snapshot.json at its root.
+      # Mounting the full cache home also lets CodexBar persist its incremental
+      # cost scan under /home/node/.cache/CodexBar in this read-only container.
+      EXPORTER_SNAPSHOT_CACHE_PATH: "/home/node/.cache/exporter-snapshot.json"
       CODEXBAR_CONFIG: "/home/node/.codexbar/config.json"
       CODEX_HOME: "/home/node/.codex"
       GROK_HOME: "/home/node/.grok"
@@ -53,7 +58,7 @@ services:
       - "${HOME}/.grok:/home/node/.grok:rw"
       # Uncomment for the Grok web-cookie fallback (CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT):
       # - "${HOME}/.config/google-chrome:/home/node/.config/google-chrome:ro"
-      - agent-usage-exporter-cache:/home/node/.cache/agent-usage-web:rw
+      - agent-usage-exporter-cache:/home/node/.cache:rw
 
   agent-usage-web:
     build:
