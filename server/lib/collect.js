@@ -260,9 +260,12 @@ export function createCollector({ config, runCommand }) {
 
   async function collectCostProvider(provider, usageAccountsByProvider) {
     const result = await runCodexBarJSON([
-      'cost', '--format', 'json', '--json-only', '--provider', provider
+      'cost', '--refresh', '--format', 'json', '--json-only', '--provider', provider
     ]);
     const rows = asArray(result.data).map((row) => ({ ...row, provider }));
+    if (rows.some((row) => row.historyCoverageIsEstablished === false)) {
+      throw new Error(`${provider} cost history is still indexing.`);
+    }
     const cost = costRecordsFromRows(rows, nowISO(), usageAccountsByProvider);
     const issues = attachStderrDetails(cost.issues, result.commandError, { provider, operation: 'cost' });
     return { records: cost.records, issues };

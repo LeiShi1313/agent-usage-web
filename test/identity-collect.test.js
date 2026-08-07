@@ -322,3 +322,50 @@ test('createCollector uses the configured cost provider in the failure code', as
   assert.equal(snapshot.collection.status, 'partial');
   assert.deepEqual(snapshot.records.map((record) => record.kind), ['usage']);
 });
+
+test('createCollector advances incomplete cost scans while retaining the previous complete cost record', async () => {
+  const calls = [];
+  const collector = createCollector({
+    config: collectorConfig(),
+    runCommand: async (command, args) => {
+      calls.push({ command, args });
+      if (args[0] === 'usage') {
+        return {
+          stdout: JSON.stringify([{
+            provider: 'codex',
+            accountKey: 'acct_1',
+            usage: { primary: { usedPercent: 25 } }
+          }]),
+          stderr: ''
+        };
+      }
+      return {
+        stdout: JSON.stringify([{
+          provider: 'codex',
+          accountKey: 'acct_1',
+          last30DaysCostUSD: 1,
+          historyCoverageIsEstablished: false
+        }]),
+        stderr: ''
+      };
+    }
+  });
+
+  const snapshot = await collector.collectSnapshot({
+    reason: 'test',
+    previous: previousSnapshotWithGoodCodexRecords()
+  });
+
+  const costCall = calls.find(({ args }) => args[0] === 'cost');
+  assert.equal(costCall.command, 'codexbar');
+  assert.equal(costCall.args.includes('--refresh'), true);
+
+  const costRecord = snapshot.records.find((record) => record.kind === 'cost');
+  assert.equal(costRecord.collectedAt, '2026-07-19T00:00:00.000Z');
+  assert.equal(costRecord.data.last30DaysCostUSD, 5);
+
+  const costIssue = snapshot.errors.find((issue) => issue.operation === 'cost');
+  assert.equal(costIssue.code, 'cost-codex-failed');
+  assert.match(costIssue.message, /history is still indexing/i);
+  assert.equal(snapshot.collection.status, 'partial');
+});
