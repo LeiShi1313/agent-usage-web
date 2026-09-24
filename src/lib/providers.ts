@@ -57,13 +57,24 @@ export function providerHealth(provider: ProviderPayload) {
 /**
  * Find the cost row for a usage row. Matches on provider AND accountKey;
  * a usage row without an accountKey may only match a cost row that also
- * has no accountKey. Never borrows another account's cost.
+ * has no accountKey. Otherwise expose only explicitly local, unattributed
+ * history as an all-accounts total. Never borrows another account's cost.
  */
 export function costFor(provider: string, costs: CostPayload[], accountKey?: string | null) {
   const wanted = accountKey ?? null;
-  return costs.find(
+  const matched = costs.find(
     (item) => item.provider === provider && (item.accountKey ?? null) === wanted && !item.error
   );
+  if (matched) return matched;
+  const local = costs.filter((item) => item.provider === provider && item.accountScope === 'local' && !item.error);
+  if (!local.length) return undefined;
+  return {
+    provider,
+    source: 'local',
+    accountScope: 'local' as const,
+    last30DaysCostUSD: local.reduce((total, item) => total + (item.last30DaysCostUSD ?? 0), 0),
+    last30DaysTokens: local.reduce((total, item) => total + (item.last30DaysTokens ?? 0), 0)
+  };
 }
 
 /**

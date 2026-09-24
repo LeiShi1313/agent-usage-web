@@ -79,7 +79,7 @@ To add Claude, sign in with Claude Code on the host (`claude auth login`) and en
 { "id": "claude", "enabled": true, "source": "oauth" }
 ```
 
-Update the existing Claude entry inside `providers`; preserve the other entries. The exporter reads `~/.claude/.credentials.json` for quotas and `~/.claude/projects` for local token/cost history. Claude Code owns credential refresh, so the mount is writable. OAuth requires a login token with the `user:profile` scope; an inference-only setup token cannot fetch usage. Recreate the exporter after adding the mount (`docker compose up -d --build`). If you set a fixed usage or cost allowlist, include `claude` there too.
+Update the existing Claude entry inside `providers`; preserve the other entries. The exporter reads `~/.claude/.credentials.json` for quotas and `~/.claude/projects` for local token/cost history. Claude Code owns credential refresh, so the mount is writable. OAuth requires a login token with the `user:profile` scope; an inference-only setup token cannot fetch usage. Recreate the exporter after adding the mount (`docker compose up -d --build`). If you set a fixed usage or cost allowlist, include `claude` there too. When the collector supplies no account identity, the Cost panel explicitly shows **Local cost · all accounts**; it does not attribute that history to the selected subscription.
 
 The exporter keeps cost indexes in its cache volume and uses a separate writable home volume for CodexBar OAuth/cookie caches, locks, preferences, and Claude CLI state. Provider state uses the explicit bind mounts above, and the CodexBar config file stays read-only. The container root filesystem remains read-only.
 

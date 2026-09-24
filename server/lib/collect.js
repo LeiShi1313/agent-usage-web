@@ -86,7 +86,9 @@ export function costRecordsFromRows(rows, collectedAt, usageAccountsByProvider) 
   for (const row of rows) {
     const provider = providerFromRow(row);
     const providerUsageAccounts = usageAccountsByProvider.get(provider) ?? [];
-    const fallback = providerUsageAccounts.length === 1
+    // Claude's local logs can span accounts; the active subscription is not
+    // evidence that it owns all historical costs. Preserve explicit identities.
+    const fallback = provider !== 'claude' && providerUsageAccounts.length === 1
       ? { ...providerUsageAccounts[0], identitySource: 'single-local-usage-account' }
       : null;
     const account = deriveAccount(row, provider, fallback);

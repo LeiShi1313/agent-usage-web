@@ -216,6 +216,7 @@ test('dashboard payload matches the frontend contract for complete usage and cos
       provider: 'codex',
       account: 'display@example.com',
       accountKey: publicAccountKey,
+      accountScope: 'account',
       source: 'local',
       updatedAt: timestamp,
       sessionTokens: 10,
@@ -229,4 +230,20 @@ test('dashboard payload matches the frontend contract for complete usage and cos
     upstreamIssues: [],
     upstreamErrors: []
   });
+});
+
+
+test('unidentified Claude costs remain separate from accounts and explicitly carry local scope', () => {
+  const timestamp = isoAgo(1000);
+  const target = makeTarget(1);
+  const unknown = { key: 'unknown:local', identitySource: 'unknown' };
+  const usage = usageRecord({ updatedAt: timestamp, acct: unknown, provider: 'claude' });
+  const cost = costRecord({ updatedAt: timestamp, acct: unknown, provider: 'claude' });
+  cost.data = { last30DaysCostUSD: 7, last30DaysTokens: 1200 };
+  const knownCost = costRecord({ updatedAt: timestamp, acct: account(), provider: 'claude' });
+  const dashboard = makeBuilder().buildDashboard([target], cacheFor(target, snapshotOf([usage, cost, knownCost], timestamp), timestamp));
+  const local = dashboard.cost.find((row) => row.accountScope === 'local');
+  assert.equal(local.last30DaysCostUSD, 7);
+  assert.notEqual(local.accountKey, dashboard.usage[0].accountKey);
+  assert.equal(dashboard.cost.filter((row) => row.accountScope === 'account').length, 1);
 });

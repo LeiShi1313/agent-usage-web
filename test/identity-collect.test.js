@@ -437,7 +437,7 @@ test('Claude usage and costs are collected independently and retain good costs a
   assert.equal(first.collection.status, 'ok');
   assert.deepEqual(calls, ['usage:codex', 'usage:claude', 'usage:grok', 'cost:codex', 'cost:claude']);
   const claudeCost = first.records.find((r) => r.kind === 'cost' && r.provider === 'claude');
-  assert.equal(claudeCost.account.key, 'claude@example.com');
+  assert.equal(claudeCost.account.key, 'unknown:local');
   assert.equal(claudeCost.data.last30DaysCostUSD, 7);
 
   failClaudeCost = true;

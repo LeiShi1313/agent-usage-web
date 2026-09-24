@@ -284,7 +284,7 @@ if (command === 'usage' && provider === 'grok') {
   );
   assert.equal(snapshot.records.some((record) => record.provider === 'cursor'), false);
   const claudeCost = snapshot.records.find((record) => record.provider === 'claude' && record.kind === 'cost');
-  assert.equal(claudeCost.account.key, 'claude@example.com');
+  assert.equal(claudeCost.account.key, 'unknown:local');
   assert.equal(claudeCost.data.last30DaysCostUSD, 0.5);
   const grok = snapshot.records.find((record) => record.provider === 'grok' && record.kind === 'usage');
   assert.equal(grok?.data?.usage?.primary?.usedPercent, 14);
