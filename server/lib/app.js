@@ -34,7 +34,7 @@ function applySecurityHeaders(app, { browserApp }) {
 
 export function isSensitivePath(request) {
   const rawPath = request.originalUrl.split('?')[0];
-  let decodedPath = rawPath;
+  let decodedPath;
   try {
     decodedPath = decodeURIComponent(rawPath);
   } catch {

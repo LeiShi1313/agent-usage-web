@@ -2,7 +2,7 @@
 
 Usage and cost dashboard for local AI agents. The app is split into two roles:
 
-- `exporter`: collects Codex and Antigravity through CodexBar and serves a token-protected usage snapshot.
+- `exporter`: collects enabled providers (including Codex, Claude, Antigravity, and Grok) through CodexBar and serves a token-protected usage snapshot.
 - `web`: polls one or more exporters, stores raw poll history in SQLite, aggregates by provider account, and serves the dashboard.
 
 The Docker image is published at:
@@ -62,15 +62,26 @@ The default compose stack mounts only the state the enabled providers need into 
 
 ```text
 ~/.codex                  -> /home/node/.codex:rw
-~/.codexbar               -> /home/node/.codexbar:ro
+~/.claude                 -> /home/node/.claude:rw
+~/.codexbar/config.json   -> /home/node/.codexbar/config.json:ro
 ~/.codexbar/antigravity   -> /home/node/.codexbar/antigravity:rw
 ~/.gemini                 -> /home/node/.gemini:ro  # Antigravity state uses this upstream path
 ~/.grok                   -> /home/node/.grok:rw
 ```
 
-When you enable another provider in `~/.codexbar/config.json`, add its state directory as a mount in `docker-compose.yml` (for example `~/.claude` for Claude) rather than mounting whole config trees.
+When you enable another provider in `~/.codexbar/config.json`, add its state directory as a mount in `docker-compose.yml` rather than mounting whole config trees.
 
 Enable providers in `~/.codexbar/config.json` (for example `"id": "grok", "enabled": true`). Grok needs a SuperGrok login (`grok login`) so `~/.grok/auth.json` exists; the exporter puts `~/.grok/bin` on `PATH` for the Grok CLI billing path and sets `CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT=1` so CodexBar can fall back to grok.com via Chrome cookies when needed.
+
+To add Claude, sign in with Claude Code on the host (`claude auth login`) and enable its OAuth source in `~/.codexbar/config.json`:
+
+```json
+{ "id": "claude", "enabled": true, "source": "oauth" }
+```
+
+Update the existing Claude entry inside `providers`; preserve the other entries. The exporter reads `~/.claude/.credentials.json` for quotas and `~/.claude/projects` for local token/cost history. Claude Code owns credential refresh, so the mount is writable. OAuth requires a login token with the `user:profile` scope; an inference-only setup token cannot fetch usage. Recreate the exporter after adding the mount (`docker compose up -d --build`). If you set a fixed usage or cost allowlist, include `claude` there too. When the collector supplies no account identity, the Cost panel explicitly shows **Local cost · all accounts**; it does not attribute that history to the selected subscription.
+
+The exporter keeps cost indexes in its cache volume and uses a separate writable home volume for CodexBar OAuth/cookie caches, locks, preferences, and Claude CLI state. Provider state uses the explicit bind mounts above, and the CodexBar config file stays read-only. The container root filesystem remains read-only.
 
 The web role does not mount agent auth or cache directories. It only has a writable Docker volume for SQLite poll history.
 
@@ -81,7 +92,7 @@ AGENT_USAGE_WEB_PORT=39173
 AGENT_USAGE_EXPORTER_PORT=39174
 EXPORTER_TOKEN=replace-me
 WEB_ACCOUNT_DISPLAY=hidden
-WEB_PROVIDER_ORDER=codex,antigravity,grok
+WEB_PROVIDER_ORDER=codex,claude,antigravity,grok
 WEB_EXPORTER_POLL_SECONDS=60
 WEB_POLL_RETENTION_DAYS=30
 WEB_REFRESH_MIN_INTERVAL_SECONDS=30
@@ -101,7 +112,7 @@ WEB_EXPORTERS_JSON=[{"url":"http://agent-usage-exporter:3000","token":"same-as-e
 
 `WEB_ACCOUNT_DISPLAY=hidden` is the default. In that mode, public API responses do not include account emails or raw account IDs; the UI receives opaque per-account keys for selection and cost matching.
 
-`EXPORTER_CODEX_USAGE_SOURCE=oauth` applies only to the Codex probe. By default the exporter scrapes every **enabled** provider in `~/.codexbar/config.json` (one `codexbar usage --provider <id>` call each). Override with `EXPORTER_USAGE_PROVIDERS=codex,antigravity,grok` if you want a fixed allowlist. Cost collection defaults to Codex (`EXPORTER_COST_PROVIDER`).
+`EXPORTER_CODEX_USAGE_SOURCE=oauth` applies only to the Codex probe. By default the exporter scrapes every **enabled** provider in `~/.codexbar/config.json` (one `codexbar usage --provider <id>` call each). Override with `EXPORTER_USAGE_PROVIDERS=codex,claude,antigravity,grok` if you want a fixed allowlist. Cost collection scans local history for enabled Codex and Claude providers. `EXPORTER_COST_PROVIDER` accepts a comma-separated override (a single provider remains supported).
 
 ## API
 

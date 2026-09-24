@@ -194,7 +194,7 @@ if (command === 'usage' && provider === 'codex') {
   assert.doesNotMatch(JSON.stringify(snapshot.errors[0]), /person@example\.com|secret-token-value|\/home\/node/);
 });
 
-test('exporter scrapes enabled CodexBar providers including grok when config drives collection', async (t) => {
+test('exporter scrapes enabled CodexBar providers including Claude and Grok when config drives collection', async (t) => {
   const temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'agent-usage-exporter-config-'));
   t.after(() => rm(temporaryDirectory, { recursive: true, force: true }));
 
@@ -241,7 +241,8 @@ if (command === 'usage' && provider === 'grok') {
     providers: [
       { id: 'codex', enabled: true },
       { id: 'antigravity', enabled: true },
-      { id: 'claude', enabled: false },
+      { id: 'claude', enabled: true },
+      { id: 'cursor', enabled: false },
       { id: 'grok', enabled: true }
     ]
   }));
@@ -272,14 +273,19 @@ if (command === 'usage' && provider === 'grok') {
   assert.deepEqual(calls.map(({ command, provider }) => `${command}:${provider}`), [
     'usage:codex',
     'usage:antigravity',
+    'usage:claude',
     'usage:grok',
-    'cost:codex'
+    'cost:codex',
+    'cost:claude'
   ]);
   assert.deepEqual(
     [...new Set(snapshot.records.map((record) => record.provider))].sort(),
-    ['antigravity', 'codex', 'grok']
+    ['antigravity', 'claude', 'codex', 'grok']
   );
-  assert.equal(snapshot.records.some((record) => record.provider === 'claude'), false);
+  assert.equal(snapshot.records.some((record) => record.provider === 'cursor'), false);
+  const claudeCost = snapshot.records.find((record) => record.provider === 'claude' && record.kind === 'cost');
+  assert.equal(claudeCost.account.key, 'unknown:local');
+  assert.equal(claudeCost.data.last30DaysCostUSD, 0.5);
   const grok = snapshot.records.find((record) => record.provider === 'grok' && record.kind === 'usage');
   assert.equal(grok?.data?.usage?.primary?.usedPercent, 14);
   assert.equal(grok?.data?.usage?.identity?.loginMethod, 'SuperGrok');

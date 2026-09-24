@@ -129,6 +129,7 @@ export function createDashboardBuilder({ accountDisplay, staleAfterSeconds, expi
       provider: record.provider,
       account: publicAccount(record.account),
       accountKey: publicAccountKey(aggregationKey, record.provider),
+      accountScope: !record.account?.key || record.account.key === 'unknown:local' ? 'local' : 'account',
       source: record.source ?? data.source ?? 'codexbar',
       updatedAt: data.updatedAt ?? record.collectedAt ?? null,
       sessionTokens: numeric(data.sessionTokens),

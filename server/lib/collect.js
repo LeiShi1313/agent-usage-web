@@ -86,7 +86,9 @@ export function costRecordsFromRows(rows, collectedAt, usageAccountsByProvider) 
   for (const row of rows) {
     const provider = providerFromRow(row);
     const providerUsageAccounts = usageAccountsByProvider.get(provider) ?? [];
-    const fallback = providerUsageAccounts.length === 1
+    // Claude's local logs can span accounts; the active subscription is not
+    // evidence that it owns all historical costs. Preserve explicit identities.
+    const fallback = provider !== 'claude' && providerUsageAccounts.length === 1
       ? { ...providerUsageAccounts[0], identitySource: 'single-local-usage-account' }
       : null;
     const account = deriveAccount(row, provider, fallback);
@@ -144,14 +146,14 @@ export function createCollector({ config, runCommand }) {
     commandTimeoutMs,
     usageProviders: usageProvidersOverride,
     usageProvidersFallback,
-    costProvider,
+    costProviders: costProvidersOverride,
     codexUsageSource,
     codexbarConfigPath
   } = config;
 
   async function runCodexBarJSON(args, timeoutMs = commandTimeoutMs) {
-    let stdout = '';
-    let stderr = '';
+    let stdout;
+    let stderr;
     try {
       ({ stdout, stderr } = await runCommand('codexbar', args, {
         timeout: timeoutMs,
@@ -163,6 +165,8 @@ export function createCollector({ config, runCommand }) {
       stderr = typeof error?.stderr === 'string' ? error.stderr : '';
       if (!stdout.trim()) {
         const detail = redactText(error instanceof Error ? error.message : String(error));
+        // Do not retain raw subprocess output on this sanitized error boundary.
+        // eslint-disable-next-line preserve-caught-error
         throw new Error(detail || `codexbar ${args[0] ?? ''} failed.`);
       }
     }
@@ -317,17 +321,24 @@ export function createCollector({ config, runCommand }) {
       }
     }
 
-    try {
-      const cost = await collectCostProvider(costProvider, usageAccountsByProvider);
-      records.push(...cost.records);
-      errors.push(...cost.issues);
-    } catch (error) {
-      failedScopes.push({ kind: 'cost', provider: costProvider });
-      errors.push(makeIssue(
-        `${costProvider} cost collection failed: ${error instanceof Error ? error.message : String(error)}`,
-        `cost-${costProvider}-failed`,
-        { provider: costProvider, operation: 'cost' }
-      ));
+    // Local cost scans are supported for Codex and Claude. An explicit override
+    // keeps working independently of the enabled usage providers.
+    const costProviders = costProvidersOverride.length
+      ? [...new Set(costProvidersOverride)]
+      : usageProviders.filter((provider) => ['codex', 'claude'].includes(provider));
+    for (const provider of costProviders) {
+      try {
+        const cost = await collectCostProvider(provider, usageAccountsByProvider);
+        records.push(...cost.records);
+        errors.push(...cost.issues);
+      } catch (error) {
+        failedScopes.push({ kind: 'cost', provider });
+        errors.push(makeIssue(
+          `${provider} cost collection failed: ${error instanceof Error ? error.message : String(error)}`,
+          `cost-${provider}-failed`,
+          { provider, operation: 'cost' }
+        ));
+      }
     }
 
     // Carry forward the previous snapshot's records for scopes that failed

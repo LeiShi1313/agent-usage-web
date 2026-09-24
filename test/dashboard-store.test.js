@@ -82,7 +82,7 @@ function makeBuilder(overrides = {}) {
     accountDisplay: 'label',
     staleAfterSeconds: 600,
     expiredAfterSeconds: 86_400,
-    providerOrder: ['codex', 'antigravity', 'grok'],
+    providerOrder: ['codex', 'claude', 'antigravity', 'grok'],
     ...overrides
   });
 }
@@ -520,7 +520,7 @@ test('loadConfig applies web defaults', () => {
   assert.equal(config.web.pollRetentionDays, 30);
   assert.equal(config.web.staleAfterSeconds, 600);
   assert.equal(config.web.expiredAfterSeconds, 86_400);
-  assert.deepEqual(config.web.providerOrder, ['codex', 'antigravity', 'grok']);
+  assert.deepEqual(config.web.providerOrder, ['codex', 'claude', 'antigravity', 'grok']);
 });
 
 test('loadConfig honors explicit poll retention values including zero', () => {

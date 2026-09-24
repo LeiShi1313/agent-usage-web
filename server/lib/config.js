@@ -38,7 +38,7 @@ export function loadConfig(env) {
       // Optional allowlist override. When unset, enabled providers come from CodexBar config.
       usageProviders: parseProviderOrder(env.EXPORTER_USAGE_PROVIDERS ?? ''),
       usageProvidersFallback: ['codex', 'antigravity'],
-      costProvider: env.EXPORTER_COST_PROVIDER?.trim().toLowerCase() || 'codex',
+      costProviders: parseProviderOrder(env.EXPORTER_COST_PROVIDER ?? ''),
       codexUsageSource: String(env.EXPORTER_CODEX_USAGE_SOURCE ?? '').trim().toLowerCase(),
       codexbarConfigPath: env.CODEXBAR_CONFIG ?? null
     }),
@@ -52,7 +52,7 @@ export function loadConfig(env) {
       pollRetentionDays: numberEnv(env.WEB_POLL_RETENTION_DAYS, 30),
       sqlitePath: env.WEB_SQLITE_PATH ??
         path.join(xdgDataHome, 'agent-usage-web', 'polls.sqlite'),
-      providerOrder: parseProviderOrder(env.WEB_PROVIDER_ORDER ?? 'codex,antigravity,grok')
+      providerOrder: parseProviderOrder(env.WEB_PROVIDER_ORDER ?? 'codex,claude,antigravity,grok')
     })
   });
 }
@@ -75,7 +75,7 @@ function readTargetConfigFromEnv(env) {
 }
 
 export async function loadWebTargets(env) {
-  let raw = null;
+  let raw;
   const configPath = env.WEB_EXPORTERS_CONFIG ?? env.WEB_EXPORTERS_FILE;
   if (configPath) {
     raw = JSON.parse(await fs.readFile(configPath, 'utf8'));
