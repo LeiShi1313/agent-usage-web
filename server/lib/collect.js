@@ -150,8 +150,8 @@ export function createCollector({ config, runCommand }) {
   } = config;
 
   async function runCodexBarJSON(args, timeoutMs = commandTimeoutMs) {
-    let stdout = '';
-    let stderr = '';
+    let stdout;
+    let stderr;
     try {
       ({ stdout, stderr } = await runCommand('codexbar', args, {
         timeout: timeoutMs,
@@ -163,6 +163,8 @@ export function createCollector({ config, runCommand }) {
       stderr = typeof error?.stderr === 'string' ? error.stderr : '';
       if (!stdout.trim()) {
         const detail = redactText(error instanceof Error ? error.message : String(error));
+        // Do not retain raw subprocess output on this sanitized error boundary.
+        // eslint-disable-next-line preserve-caught-error
         throw new Error(detail || `codexbar ${args[0] ?? ''} failed.`);
       }
     }

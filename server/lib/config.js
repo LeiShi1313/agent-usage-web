@@ -75,7 +75,7 @@ function readTargetConfigFromEnv(env) {
 }
 
 export async function loadWebTargets(env) {
-  let raw = null;
+  let raw;
   const configPath = env.WEB_EXPORTERS_CONFIG ?? env.WEB_EXPORTERS_FILE;
   if (configPath) {
     raw = JSON.parse(await fs.readFile(configPath, 'utf8'));
