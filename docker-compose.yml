@@ -52,7 +52,7 @@ services:
       - "${HOME}/.codex:/home/node/.codex:rw"
       # Claude OAuth credentials and local session history; CLI refresh needs writes.
       - "${HOME}/.claude:/home/node/.claude:rw"
-      - "${HOME}/.codexbar:/home/node/.codexbar:ro"
+      - "${HOME}/.codexbar/config.json:/home/node/.codexbar/config.json:ro"
       - "${HOME}/.codexbar/antigravity:/home/node/.codexbar/antigravity:rw"
       # Antigravity state uses the upstream ~/.gemini path.
       - "${HOME}/.gemini:/home/node/.gemini:ro"
@@ -61,6 +61,9 @@ services:
       # Uncomment for the Grok web-cookie fallback (CODEXBAR_ALLOW_BROWSER_COOKIE_IMPORT):
       # - "${HOME}/.config/google-chrome:/home/node/.config/google-chrome:ro"
       - agent-usage-exporter-cache:/home/node/.cache:rw
+      # CodexBar/Claude also write OAuth locks, preferences, and CLI state in HOME.
+      # Provider auth stays in the explicit bind mounts above; config stays read-only.
+      - agent-usage-exporter-data:/home/node:rw
 
   agent-usage-web:
     build:
@@ -107,4 +110,5 @@ services:
 
 volumes:
   agent-usage-exporter-cache:
+  agent-usage-exporter-data:
   agent-usage-web-data:

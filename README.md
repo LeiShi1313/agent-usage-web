@@ -63,7 +63,7 @@ The default compose stack mounts only the state the enabled providers need into 
 ```text
 ~/.codex                  -> /home/node/.codex:rw
 ~/.claude                 -> /home/node/.claude:rw
-~/.codexbar               -> /home/node/.codexbar:ro
+~/.codexbar/config.json   -> /home/node/.codexbar/config.json:ro
 ~/.codexbar/antigravity   -> /home/node/.codexbar/antigravity:rw
 ~/.gemini                 -> /home/node/.gemini:ro  # Antigravity state uses this upstream path
 ~/.grok                   -> /home/node/.grok:rw
@@ -80,6 +80,8 @@ To add Claude, sign in with Claude Code on the host (`claude auth login`) and en
 ```
 
 Update the existing Claude entry inside `providers`; preserve the other entries. The exporter reads `~/.claude/.credentials.json` for quotas and `~/.claude/projects` for local token/cost history. Claude Code owns credential refresh, so the mount is writable. OAuth requires a login token with the `user:profile` scope; an inference-only setup token cannot fetch usage. Recreate the exporter after adding the mount (`docker compose up -d --build`). If you set a fixed usage or cost allowlist, include `claude` there too.
+
+The exporter keeps cost indexes in its cache volume and uses a separate writable home volume for CodexBar OAuth/cookie caches, locks, preferences, and Claude CLI state. Provider state uses the explicit bind mounts above, and the CodexBar config file stays read-only. The container root filesystem remains read-only.
 
 The web role does not mount agent auth or cache directories. It only has a writable Docker volume for SQLite poll history.
 

@@ -50,7 +50,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=web-build /app/dist ./dist
 COPY server ./server
 
-RUN mkdir -p /home/node/.cache/agent-usage-web /home/node/.local/share/agent-usage-web \
+RUN mkdir -p /home/node/.codexbar /home/node/.cache/agent-usage-web /home/node/.local/share/agent-usage-web \
     && chown -R node:node /app /home/node
 
 USER node
