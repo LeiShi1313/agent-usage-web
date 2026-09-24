@@ -232,7 +232,7 @@ function collectorConfig(overrides = {}) {
     commandTimeoutMs: 5000,
     usageProviders: ['codex'],
     usageProvidersFallback: [],
-    costProvider: 'codex',
+    costProviders: ['codex'],
     codexUsageSource: '',
     codexbarConfigPath: null,
     ...overrides
@@ -306,7 +306,7 @@ test('createCollector does not carry forward records that had errors', async () 
 
 test('createCollector uses the configured cost provider in the failure code', async () => {
   const collector = createCollector({
-    config: collectorConfig({ costProvider: 'claude' }),
+    config: collectorConfig({ costProviders: ['claude'] }),
     runCommand: async (_command, args) => {
       if (args[0] === 'usage') {
         return { stdout: JSON.stringify([{ provider: 'codex', accountKey: 'acct_1' }]), stderr: '' };
@@ -408,4 +408,41 @@ test('createCollector rejects Codex cost rows without an explicit history covera
   assert.equal(costIssue.code, 'cost-codex-failed');
   assert.match(costIssue.message, /completion marker is missing/i);
   assert.equal(snapshot.collection.status, 'partial');
+});
+
+test('Claude usage and costs are collected independently and retain good costs after a failed refresh', async () => {
+  const { loadConfig } = await import('../server/lib/config.js');
+  const calls = [];
+  let failClaudeCost = false;
+  const collector = createCollector({
+    config: loadConfig({ EXPORTER_USAGE_PROVIDERS: 'codex,claude,grok', EXPORTER_CODEX_USAGE_SOURCE: 'oauth' }).exporter,
+    runCommand: async (_command, args) => {
+      const provider = args[args.indexOf('--provider') + 1];
+      calls.push(`${args[0]}:${provider}`);
+      if (args[0] === 'usage') {
+        if (provider === 'claude') assert.equal(args.includes('--source'), false);
+        return { stdout: JSON.stringify([{
+          provider, source: 'oauth', account: `${provider}@example.com`,
+          usage: { primary: { usedPercent: 12, windowMinutes: 300 }, secondary: { usedPercent: 34, windowMinutes: 10080 } }
+        }]), stderr: '' };
+      }
+      if (provider === 'claude' && failClaudeCost) throw new Error('Claude history unavailable');
+      return { stdout: JSON.stringify([{
+        provider, source: 'local', last30DaysCostUSD: provider === 'claude' ? 7 : 3,
+        ...(provider === 'codex' ? { historyCoverageIsEstablished: true } : {})
+      }]), stderr: '' };
+    }
+  });
+  const first = await collector.collectSnapshot();
+  assert.equal(first.collection.status, 'ok');
+  assert.deepEqual(calls, ['usage:codex', 'usage:claude', 'usage:grok', 'cost:codex', 'cost:claude']);
+  const claudeCost = first.records.find((r) => r.kind === 'cost' && r.provider === 'claude');
+  assert.equal(claudeCost.account.key, 'claude@example.com');
+  assert.equal(claudeCost.data.last30DaysCostUSD, 7);
+
+  failClaudeCost = true;
+  const second = await collector.collectSnapshot({ previous: first });
+  assert.equal(second.collection.status, 'partial');
+  assert.deepEqual(second.records.find((r) => r.kind === 'cost' && r.provider === 'claude'), claudeCost);
+  assert.deepEqual(second.errors.map((e) => e.code), ['cost-claude-failed']);
 });

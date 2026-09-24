@@ -144,7 +144,7 @@ export function createCollector({ config, runCommand }) {
     commandTimeoutMs,
     usageProviders: usageProvidersOverride,
     usageProvidersFallback,
-    costProvider,
+    costProviders: costProvidersOverride,
     codexUsageSource,
     codexbarConfigPath
   } = config;
@@ -319,17 +319,24 @@ export function createCollector({ config, runCommand }) {
       }
     }
 
-    try {
-      const cost = await collectCostProvider(costProvider, usageAccountsByProvider);
-      records.push(...cost.records);
-      errors.push(...cost.issues);
-    } catch (error) {
-      failedScopes.push({ kind: 'cost', provider: costProvider });
-      errors.push(makeIssue(
-        `${costProvider} cost collection failed: ${error instanceof Error ? error.message : String(error)}`,
-        `cost-${costProvider}-failed`,
-        { provider: costProvider, operation: 'cost' }
-      ));
+    // Local cost scans are supported for Codex and Claude. An explicit override
+    // keeps working independently of the enabled usage providers.
+    const costProviders = costProvidersOverride.length
+      ? [...new Set(costProvidersOverride)]
+      : usageProviders.filter((provider) => ['codex', 'claude'].includes(provider));
+    for (const provider of costProviders) {
+      try {
+        const cost = await collectCostProvider(provider, usageAccountsByProvider);
+        records.push(...cost.records);
+        errors.push(...cost.issues);
+      } catch (error) {
+        failedScopes.push({ kind: 'cost', provider });
+        errors.push(makeIssue(
+          `${provider} cost collection failed: ${error instanceof Error ? error.message : String(error)}`,
+          `cost-${provider}-failed`,
+          { provider, operation: 'cost' }
+        ));
+      }
     }
 
     // Carry forward the previous snapshot's records for scopes that failed

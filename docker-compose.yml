@@ -28,7 +28,7 @@ services:
       EXPORTER_REFRESH_MIN_INTERVAL_SECONDS: "${EXPORTER_REFRESH_MIN_INTERVAL_SECONDS:-60}"
       EXPORTER_CODEX_USAGE_SOURCE: "${EXPORTER_CODEX_USAGE_SOURCE:-oauth}"
       EXPORTER_USAGE_PROVIDERS: "${EXPORTER_USAGE_PROVIDERS:-}"
-      EXPORTER_COST_PROVIDER: "${EXPORTER_COST_PROVIDER:-codex}"
+      EXPORTER_COST_PROVIDER: "${EXPORTER_COST_PROVIDER:-}"
       # The existing named volume stores exporter-snapshot.json at its root.
       # Mounting the full cache home also lets CodexBar persist its incremental
       # cost scan under /home/node/.cache/CodexBar in this read-only container.
@@ -45,11 +45,13 @@ services:
       XDG_CACHE_HOME: "/home/node/.cache"
       XDG_DATA_HOME: "/home/node/.local/share"
     # Mount only the state the enabled providers need. Add mounts when you
-    # enable more providers in ~/.codexbar/config.json (e.g. ~/.claude for
-    # Claude) instead of exposing whole config trees to the collector.
+    # enable more providers in ~/.codexbar/config.json instead of exposing
+    # whole config trees to the collector.
     volumes:
       # Codex OAuth rotates refresh tokens during collection; this mount must be writable.
       - "${HOME}/.codex:/home/node/.codex:rw"
+      # Claude OAuth credentials and local session history; CLI refresh needs writes.
+      - "${HOME}/.claude:/home/node/.claude:rw"
       - "${HOME}/.codexbar:/home/node/.codexbar:ro"
       - "${HOME}/.codexbar/antigravity:/home/node/.codexbar/antigravity:rw"
       # Antigravity state uses the upstream ~/.gemini path.
@@ -87,7 +89,7 @@ services:
       APP_ROLE: "web"
       PORT: "3000"
       WEB_ACCOUNT_DISPLAY: "${WEB_ACCOUNT_DISPLAY:-hidden}"
-      WEB_PROVIDER_ORDER: "${WEB_PROVIDER_ORDER:-codex,antigravity,grok}"
+      WEB_PROVIDER_ORDER: "${WEB_PROVIDER_ORDER:-codex,claude,antigravity,grok}"
       WEB_EXPORTER_POLL_SECONDS: "${WEB_EXPORTER_POLL_SECONDS:-60}"
       WEB_STALE_AFTER_SECONDS: "${WEB_STALE_AFTER_SECONDS:-600}"
       WEB_EXPIRED_AFTER_SECONDS: "${WEB_EXPIRED_AFTER_SECONDS:-86400}"
