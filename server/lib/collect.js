@@ -274,7 +274,13 @@ export function createCollector({ config, runCommand }) {
       throw new Error(`${provider} cost history completion marker is missing.`);
     }
     const cost = costRecordsFromRows(rows, nowISO(), usageAccountsByProvider);
-    const issues = attachStderrDetails(cost.issues, result.commandError, { provider, operation: 'cost' });
+    let issues = attachStderrDetails(cost.issues, result.commandError, { provider, operation: 'cost' });
+    if (!rows.length && !issues.length) {
+      issues = [makeIssue(`${provider} cost returned no data.`, `cost-${provider}-empty`, {
+        provider,
+        operation: 'cost'
+      })];
+    }
     return { records: cost.records, issues };
   }
 
@@ -329,8 +335,12 @@ export function createCollector({ config, runCommand }) {
     for (const provider of costProviders) {
       try {
         const cost = await collectCostProvider(provider, usageAccountsByProvider);
-        records.push(...cost.records);
         errors.push(...cost.issues);
+        if (cost.records.some((record) => !record.error)) {
+          records.push(...cost.records);
+        } else {
+          failedScopes.push({ kind: 'cost', provider });
+        }
       } catch (error) {
         failedScopes.push({ kind: 'cost', provider });
         errors.push(makeIssue(

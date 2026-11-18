@@ -413,7 +413,7 @@ test('createCollector rejects Codex cost rows without an explicit history covera
 test('Claude usage and costs are collected independently and retain good costs after a failed refresh', async () => {
   const { loadConfig } = await import('../server/lib/config.js');
   const calls = [];
-  let failClaudeCost = false;
+  let claudeCostFailure;
   const collector = createCollector({
     config: loadConfig({ EXPORTER_USAGE_PROVIDERS: 'codex,claude,grok', EXPORTER_CODEX_USAGE_SOURCE: 'oauth' }).exporter,
     runCommand: async (_command, args) => {
@@ -426,7 +426,7 @@ test('Claude usage and costs are collected independently and retain good costs a
           usage: { primary: { usedPercent: 12, windowMinutes: 300 }, secondary: { usedPercent: 34, windowMinutes: 10080 } }
         }]), stderr: '' };
       }
-      if (provider === 'claude' && failClaudeCost) throw new Error('Claude history unavailable');
+      if (provider === 'claude' && claudeCostFailure) throw claudeCostFailure;
       return { stdout: JSON.stringify([{
         provider, source: 'local', last30DaysCostUSD: provider === 'claude' ? 7 : 3,
         ...(provider === 'codex' ? { historyCoverageIsEstablished: true } : {})
@@ -440,9 +440,19 @@ test('Claude usage and costs are collected independently and retain good costs a
   assert.equal(claudeCost.account.key, 'unknown:local');
   assert.equal(claudeCost.data.last30DaysCostUSD, 7);
 
-  failClaudeCost = true;
+  claudeCostFailure = new Error('Claude history unavailable');
   const second = await collector.collectSnapshot({ previous: first });
   assert.equal(second.collection.status, 'partial');
   assert.deepEqual(second.records.find((r) => r.kind === 'cost' && r.provider === 'claude'), claudeCost);
   assert.deepEqual(second.errors.map((e) => e.code), ['cost-claude-failed']);
+
+  claudeCostFailure.stdout = JSON.stringify([{
+    provider: 'claude', error: { message: 'Claude history unavailable' }
+  }]);
+  const third = await collector.collectSnapshot({ previous: second });
+  assert.equal(third.collection.status, 'partial');
+  assert.deepEqual(third.records.filter((r) => r.kind === 'cost' && r.provider === 'claude'), [claudeCost]);
+  assert.equal(third.errors.length, 1);
+  assert.match(third.errors[0].message, /Claude history unavailable/);
+
 });
