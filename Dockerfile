@@ -8,7 +8,7 @@ RUN npm run build
 
 FROM node:24-trixie-slim AS runtime
 
-ARG CODEXBAR_VERSION=0.65.0
+ARG CODEXBAR_VERSION=0.84.0
 ARG CODEX_CLI_VERSION=0.156.1
 ARG CLAUDE_CODE_VERSION=2.1.281
 
@@ -27,8 +27,8 @@ RUN npm install -g "@openai/codex@${CODEX_CLI_VERSION}" "@anthropic-ai/claude-co
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
     case "$arch" in \
-      amd64) asset_arch="x86_64"; expected_sha256="fb4fa6c022fa3b3e710f5614e41313db31a025df630ef75910a8a811b71022ca" ;; \
-      arm64) asset_arch="aarch64"; expected_sha256="4edca5cb0b44bb14ffd0178773a698768e55b3840cdbd7b52f47ff5cab635a7f" ;; \
+      amd64) asset_arch="x86_64"; expected_sha256="724b0beb0d2769cfc6fc1558f2782b5b812eb73a140582b9716faf662adbaea0" ;; \
+      arm64) asset_arch="aarch64"; expected_sha256="76946e4d26cd6e645b046099bb77a43b6fb62327c77697fd064625bf9455d1af" ;; \
       *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
     esac; \
     asset="CodexBarCLI-v${CODEXBAR_VERSION}-linux-${asset_arch}.tar.gz"; \
