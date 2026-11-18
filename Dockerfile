@@ -8,9 +8,9 @@ RUN npm run build
 
 FROM node:24-trixie-slim AS runtime
 
-ARG CODEXBAR_VERSION=0.48.0
-ARG CODEX_CLI_VERSION=latest
-ARG CLAUDE_CODE_VERSION=latest
+ARG CODEXBAR_VERSION=0.84.0
+ARG CODEX_CLI_VERSION=0.156.1
+ARG CLAUDE_CODE_VERSION=2.1.281
 
 ENV NODE_ENV=production \
     PORT=3000 \
@@ -27,8 +27,8 @@ RUN npm install -g "@openai/codex@${CODEX_CLI_VERSION}" "@anthropic-ai/claude-co
 RUN set -eux; \
     arch="$(dpkg --print-architecture)"; \
     case "$arch" in \
-      amd64) asset_arch="x86_64"; expected_sha256="cc7054582773ceee06d2e75c3bc27f7a76b5735d995a4fd1f54e28372fc41a73" ;; \
-      arm64) asset_arch="aarch64"; expected_sha256="67588b3e6fe0c7ac65d890fe5929ea111387e604b8483bcc2fee51fb35adfddf" ;; \
+      amd64) asset_arch="x86_64"; expected_sha256="724b0beb0d2769cfc6fc1558f2782b5b812eb73a140582b9716faf662adbaea0" ;; \
+      arm64) asset_arch="aarch64"; expected_sha256="76946e4d26cd6e645b046099bb77a43b6fb62327c77697fd064625bf9455d1af" ;; \
       *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
     esac; \
     asset="CodexBarCLI-v${CODEXBAR_VERSION}-linux-${asset_arch}.tar.gz"; \
@@ -50,7 +50,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=web-build /app/dist ./dist
 COPY server ./server
 
-RUN mkdir -p /home/node/.cache/agent-usage-web /home/node/.local/share/agent-usage-web \
+RUN mkdir -p /home/node/.codexbar /home/node/.cache/agent-usage-web /home/node/.local/share/agent-usage-web \
     && chown -R node:node /app /home/node
 
 USER node

@@ -75,7 +75,7 @@ export function ProviderDetail({ provider, cost }: { provider: ProviderPayload; 
         <div className="quiet-tile">
           <div className="tile-label">
             <BarChart3 size={16} />
-            Cost
+            {cost?.accountScope === 'local' ? 'Local cost · all accounts' : 'Cost'}
           </div>
           <p className="tile-value">{cost ? formatMoney(cost.last30DaysCostUSD) : 'No cost data'}</p>
           <p className="soft-label">{cost ? `${formatTokens(cost.last30DaysTokens)} tokens in 30 days` : 'Last 30 days'}</p>

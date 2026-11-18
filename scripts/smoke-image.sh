@@ -40,6 +40,15 @@ codexbar_version="$(
 test -n "$codexbar_version"
 test "$(docker run --rm --entrypoint codexbar "$image" --version)" = "CodexBar ${codexbar_version}"
 docker run --rm --entrypoint sh "$image" -c 'test -x /bin/ps'
+# A fresh exporter home must support CodexBar's OAuth locks and Linux caches.
+docker run --rm --read-only \
+  --mount type=volume,destination=/home/node \
+  --entrypoint sh "$image" -c '
+    touch /home/node/.codexbar/claude-oauth-cache.lock
+    mkdir -p /home/node/.local/share/CodexBar /home/node/.config
+    touch /home/node/.local/share/CodexBar/cache-check
+  '
+
 
 docker run --detach \
   --name "$exporter_name" \

@@ -63,6 +63,7 @@ export type ProviderPayload = {
 };
 
 export type CostPayload = {
+  accountScope?: 'account' | 'local';
   provider: string;
   account?: string | null;
   accountKey?: string | null;
